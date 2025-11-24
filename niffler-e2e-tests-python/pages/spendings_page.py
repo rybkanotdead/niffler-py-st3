@@ -1,11 +1,5 @@
-import os
-import random
-
 from selenium.webdriver import Keys
-from pages.auth_reg_page import AuthRegistrationPage
-from selene import browser, by, have
-
-auth_page = AuthRegistrationPage()
+from selene import browser, by
 
 
 class SpendingPage:
@@ -29,30 +23,25 @@ class SpendingPage:
         self.description = browser.element('#description')
         self.add_btn = browser.element('#save')
         self.cancel_btn = browser.element('#cancel')
-        self.table_description_first_row = browser.all('span[class*="MuiTypography-body1"]')[2]
-        self.table_description_second_row = browser.all('span[class*="MuiTypography-body1"]')[6]
+
+        # --- ИЗМЕНЕНИЕ: Ищем один элемент (тело таблицы), а не список строк ---
+        self.table_body = browser.element('tbody')
+        # ----------------------------------------------------------------------
+
         self.table_checkbox = browser.element('//tbody//input[@type="checkbox"]')
         self.table_delete_btn = browser.element('//button[contains(text(), "Delete")]')
         self.delete_button = browser.element('//div[@role="dialog"]//button[contains(text(), "Delete")]')
         self.delete_alert = browser.element('//div[contains(text(), "Spendings succesfully deleted")]')
 
-
-    def open_spending_page(self):
-        auth_page.login()
-
-
     def fill_amount(self, amount: int):
         self.amount.type(amount)
-
 
     def choose_usd(self):
         self.currency.click()
         self.usd_btn.click()
 
-
     def fill_category(self, category: str):
         self.category.type(category)
-
 
     def fill_datepicker_input(self, full_date: str):
         self.datepicker_input.send_keys(Keys.COMMAND + 'a')
@@ -68,26 +57,11 @@ class SpendingPage:
         self.datepicker_day_btn.click()
         self.datepicker_input.press(Keys.ESCAPE)
 
-
     def fill_description(self, description: str):
         self.description.type(description)
-
 
     def click_on_add(self):
         self.add_btn.click()
 
-
     def click_on_cancel(self):
         self.cancel_btn.click()
-
-
-    def add_spending(self):
-        self.open_spending_page()
-        self.add_spending_btn.click()
-        self.fill_amount(amount=random.randint(1, 100))
-        self.currency.click()
-        self.usd_btn.click()
-        self.fill_category(category='abc')
-        self.fill_datepicker_input(full_date='10/10/2024')
-        self.fill_description(description='test')
-        self.add_btn.click()

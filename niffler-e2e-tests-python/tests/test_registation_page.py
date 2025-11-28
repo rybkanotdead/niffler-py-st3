@@ -1,9 +1,13 @@
 from selene import have, be
+from faker import Faker
+
+faker = Faker()
+
 
 class TestRegistration:
 
-
     def test_register_user(self, auth_page, generate_user_data):
+        """Тест: успешная регистрация нового пользователя"""
         auth_page.open_auth_page()
         auth_page.to_register_btn.click()
         auth_page.fill_username(username=generate_user_data.get('username'))
@@ -17,6 +21,7 @@ class TestRegistration:
         auth_page.success_text.should(have.text("Congratulations! You've registered!"))
 
     def test_register_existed_user(self, auth_page, existed_user_credentials):
+        """Тест: попытка регистрации существующего пользователя"""
         auth_page.open_register_page()
         auth_page.fill_username(username=existed_user_credentials.get('username'))
         auth_page.fill_password(password=existed_user_credentials.get('password'))
@@ -26,6 +31,7 @@ class TestRegistration:
             have.text(f'Username `{existed_user_credentials.get("username")}` already exists'))
 
     def test_register_user_invalid_pass(self, auth_page, generate_user_data):
+        """Тест: регистрация с несовпадающими паролями"""
         auth_page.open_register_page()
         auth_page.fill_username(username=generate_user_data.get('username'))
         auth_page.fill_password(password=generate_user_data.get('password'))
@@ -34,6 +40,7 @@ class TestRegistration:
         auth_page.form_error.should(be.visible).should(have.text('Passwords should be equal'))
 
     def test_visible_input_errors(self, auth_page):
+        """Тест: отображение ошибок валидации полей"""
         auth_page.open_register_page()
         auth_page.fill_username(username='1')
         auth_page.fill_password(password='1')
@@ -49,9 +56,8 @@ class TestRegistration:
             be.visible
         )
 
-
     def test_register_short_password(self, auth_page, generate_user_data):
-        """Негативный тест: пароль короче 3 символов"""
+        """Негативный тест: регистрация с пароль короче 3 символов"""
         auth_page.open_register_page()
         auth_page.fill_username(generate_user_data['username'])
         short_pass = "12"

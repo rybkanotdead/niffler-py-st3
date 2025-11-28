@@ -1,23 +1,30 @@
-[tool.poetry]
-name = "niffler-e2e-tests-python"
+[project]
+name = "niffler-e-2-e-tests-python"
 version = "0.1.0"
-description = "Niffler tests"
-authors = ["QaGuru Student <student@example.com>"]
-readme = "README.md"
+description = ""
 
-[tool.poetry.dependencies]
-python = "^3.11"
-pytest = "^8.0.0"
-selene = "2.0.0rc9"
-python-dotenv = "^1.0.0"
-Faker = "^24.0.0"
-requests = "^2.31.0"
+readme = "README.md"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "pytest (>=7.0.0,<8.0.0)",
+    "selene (>=2.0.0)",
+    "selenium (>=4.15.0)",
+    "python-dotenv (>=1.0.0,<2.0.0)",
+    "faker (>=20.0.0,<30.0.0)",
+    "pytest-xdist (>=3.0.0,<4.0.0)",
+    "requests (>=2.28.0,<3.0.0)",
+    "pydantic (>=2.0.0,<3.0.0)",
+    "urllib3 (>=1.26.0,<3.0.0)",
+    "psycopg2-binary (>=2.9.0,<3.0.0)",
+    "sqlalchemy (>=2.0.0,<3.0.0)",
+    "sqlmodel (>=0.0.14,<0.1.0)"
+]
+
+[tool.pytest.ini_options]
+python_files = ["*_tests.py", "test_*.py"]
+addopts = ["-v", "-s"]
+pythonpath = "."
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.pytest.ini_options]
-python_files = ["test_*.py"]
-addopts = "-v -s"
-pythonpath = "."

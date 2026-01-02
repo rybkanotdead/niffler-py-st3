@@ -1,5 +1,5 @@
-from selene import be, have
-from marks import Pages, TestData
+import allure
+from marks import Pages
 from faker import Faker
 
 faker = Faker()
@@ -7,32 +7,48 @@ faker = Faker()
 TEST_CATEGORY = "school"
 
 
+@allure.feature("Профиль пользователя")
+@allure.story("Управление категориями")
 class TestCategories:
 
+    @allure.title("Создание новой категории")
     @Pages.profile_page
     def test_create_category(self, profile_page):
-        """Тест: создание новой категории"""
         new_category = faker.word()
-        profile_page.add_category(new_category)
-        profile_page.successful_adding(new_category)
 
+        with allure.step(f"Добавить новую категорию: '{new_category}'"):
+            profile_page.add_category(new_category)
+
+        with allure.step(f"ОР: Категория '{new_category}' появилась в списке"):
+            profile_page.successful_adding(new_category)
+
+    @allure.title("Попытка добавления категории с пустым именем")
     @Pages.profile_page
     def test_add_empty_name_category(self, profile_page):
-        """Тест: попытка добавления категории с пустым именем"""
-        profile_page.adding_empty_name_category()
-        profile_page.check_error_message("Error while adding category : Category can not be blank")
+        with allure.step("Попытаться добавить категорию без названия"):
+            profile_page.adding_empty_name_category()
+
+        with allure.step("ОР: Отображается ошибка валидации"):
+            profile_page.check_error_message("Error while adding category : Category can not be blank")
 
 
+@allure.feature("Профиль пользователя")
+@allure.story("Редактирование личных данных")
 class TestProfileInfo:
 
+    @allure.title("Проверка заголовка страницы профиля")
     @Pages.profile_page
     def test_profile_title(self, profile_page):
-        """Тест: проверка заголовка профиля"""
-        profile_page.check_profile_title('Profile')
+        with allure.step("ОР: Заголовок страницы равен 'Profile'"):
+            profile_page.check_profile_title('Profile')
 
+    @allure.title("Изменение имени пользователя (First Name)")
     @Pages.profile_page
     def test_create_user_name(self, profile_page):
-        """Тест: добавление имени пользователя в профиль"""
-        user_name = faker.user_name()
-        profile_page.add_user_name(user_name)
-        profile_page.check_successful_adding_name()
+        user_name = faker.first_name()
+
+        with allure.step(f"Изменить имя пользователя на '{user_name}'"):
+            profile_page.add_user_name(user_name)
+
+        with allure.step(f"ОР: Имя пользователя успешно обновлено на '{user_name}'"):
+            profile_page.check_successful_adding_name(user_name)

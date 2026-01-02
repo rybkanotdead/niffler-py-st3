@@ -17,12 +17,14 @@ dependencies = [
     "urllib3 (>=1.26.0,<3.0.0)",
     "psycopg2-binary (>=2.9.0,<3.0.0)",
     "sqlalchemy (>=2.0.0,<3.0.0)",
-    "sqlmodel (>=0.0.14,<0.1.0)"
+    "sqlmodel (>=0.0.14,<0.1.0)",
+    "allure-pytest (>=2.13.2,<3.0.0)"
 ]
 
 [tool.pytest.ini_options]
 python_files = ["*_tests.py", "test_*.py"]
-addopts = ["-v", "-s"]
+# Добавил --alluredir=allure-results, чтобы сохранялись результаты тестов
+addopts = ["-v", "-s", "--alluredir=allure-results"]
 pythonpath = "."
 
 [build-system]

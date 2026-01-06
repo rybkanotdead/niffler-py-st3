@@ -1,42 +1,62 @@
-from collections.abc import Sequence
-
-from sqlalchemy import create_engine, Engine
+import uuid
+from typing import Sequence
+from sqlalchemy import create_engine, Engine, event
 from sqlmodel import Session, select
-
-from models.category import Category
-from models.spend import SpendSQL
+from modals.spend import SpendSQL
+from modals.category import CategorySQL
+from modals.config import Envs
+from utils.allure_helpers import attach_sql
 
 
 class SpendDb:
+    """Клиент для взаимодействия с БД"""
+
     engine: Engine
 
-    def __init__(self, db_url: str):
-        self.engine = create_engine(db_url)
+    def __init__(self, envs: Envs) -> object:
+        self.engine = create_engine(envs.spend_db_url)
+        event.listen(self.engine, "do_execute", fn=attach_sql)
 
-    def get_user_categories(self, username: str) -> Sequence[Category]:
+    def get_user_categories(self, username: str) -> Sequence[CategorySQL]:
         with Session(self.engine) as session:
-            statement = select(Category).where(Category.username == username)
+            statement = select(CategorySQL).where(CategorySQL.username == username)
             return session.exec(statement).all()
+
+    def add_user_category(self, username: str, category_name: str) -> CategorySQL:
+        with Session(self.engine) as session:
+            new_category = CategorySQL(
+                id=str(uuid.uuid4()),
+                name=category_name,
+                username=username
+            )
+
+            session.add(new_category)
+            session.commit()
+            session.refresh(new_category)
+
+            return new_category
+
+    def get_category_by_name(self, username: str, category_name: str) -> CategorySQL:
+        with Session(self.engine) as session:
+            category = select(CategorySQL).where(
+                CategorySQL.username == username,
+                CategorySQL.name == category_name
+            )
+            return session.exec(category).first()
+
+    def get_category_by_id(self, category_id: str) -> CategorySQL:
+        with Session(self.engine) as session:
+            category = select(CategorySQL).where(CategorySQL.id == category_id)
+            return session.exec(category).first()
 
     def delete_category(self, category_id: str):
         with Session(self.engine) as session:
-            category = session.get(Category, category_id)
+            category = session.get(CategorySQL, category_id)
             session.delete(category)
             session.commit()
 
-    def get_user_category(self, category_id: str):
+    def get_spend_in_db(self, username: str):
         with Session(self.engine) as session:
-            statement = select(Category).where(Category.id == category_id)
-            return session.exec(statement).first()
-
-    def get_spend_by_id(self, spend_id: str) -> SpendSQL:
-        with Session(self.engine) as session:
-            statement = select(SpendSQL).where(SpendSQL.id == spend_id)
-            return session.exec(statement).first()
-
-    def get_user_spends(self, username: str):
-        with Session(self.engine) as session:
-            statement = select(SpendSQL, Category).join(Category, SpendSQL.category_id == Category.id).where(
-                SpendSQL.username == username)
-            result = session.exec(statement).all()
+            spend = select(SpendSQL).where(SpendSQL.username == username)
+            result = session.exec(spend).all()
             return result

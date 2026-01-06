@@ -10,9 +10,8 @@ class ProfilePage:
         self.input_category = browser.element('#category')
         self.alert = browser.element('div[role="alert"] div:nth-child(2)')
         self.error_alert = browser.element('.add-category__input-container button')
-        self.name = browser.element('#name')
+        self.name_input = browser.element('#name')  # Переименовал для ясности (было self.name)
         self.submit_button = browser.element('button[type=submit]')
-
         self.profile_title = browser.element('h2')
 
     def add_category(self, category: str):
@@ -47,15 +46,21 @@ class ProfilePage:
         Метод добавления имени в профиле пользователя
         :param name: имя пользователя
         """
-        self.name.clear()
-        self.name.type(name)
+        self.name_input.clear()
+        self.name_input.type(name)
         self.submit_button.click()
 
-    def check_successful_adding_name(self):
+    def check_successful_adding_name(self, name: str):
         """
-        Метод проверки сигнального сообщения об успешном добавлении имени пользователя
+        Метод проверки успешного обновления имени.
+        Проверяем и текст алерта, и значение в поле ввода.
         """
+        # 1. Проверяем текст всплывающего сообщения
         self.alert.should(have.text("Profile successfully updated"))
+
+        # 2. Проверяем, что в поле действительно сохранилось новое имя
+        # (Это делает передачу аргумента 'name' осмысленной)
+        self.name_input.should(have.value(name))
 
     def check_profile_title(self, title: str):
         """

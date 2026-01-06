@@ -2,23 +2,41 @@ import os
 import time
 import pytest
 import allure
+import requests
+from urllib.parse import urljoin
 from allure_commons.reporter import AllureReporter
 from allure_pytest.listener import AllureListener
 from pytest import FixtureDef, FixtureRequest
 from dotenv import load_dotenv
-from selene import browser, support
-from selenium import webdriver
+from selene import browser
 from selenium.webdriver.chrome.options import Options
 from faker import Faker
 
+# --- IMPORTS ИЗ ТВОЕГО ПРОЕКТА ---
 from helpers.db_client import DBClient
 from pages.auth_reg_page import AuthRegistrationPage
 from pages.profile_page import ProfilePage
 from pages.spendings_page import SpendingPage
 
+# Импортируем API клиент из первого файла (проверь путь к файлу)
+# Например, если файл называется clients/spends_client.py:
+from clients.spends_client import SpendsHttpClient
+
 load_dotenv()
 faker = Faker()
 
+
+def pytest_addoption(parser):
+    """
+    Добавляем опцию командной строки --headless.
+    Теперь можно запускать так: poetry run pytest --headless
+    """
+    parser.addoption(
+        "--headless",
+        action="store_true",
+        default=False,
+        help="Запуск тестов в режиме headless (без окна браузера)"
+    )
 
 
 def allure_reporter(config) -> AllureReporter:
@@ -36,22 +54,19 @@ def allure_reporter(config) -> AllureReporter:
 @pytest.hookimpl(hookwrapper=True, trylast=True)
 def pytest_fixture_setup(fixturedef: FixtureDef, request: FixtureRequest):
     """
-    Хук: Добавляет красивые имена фикстурам в отчет (как в примере друга).
-    Например: [S] Envs (где S - Session scope)
+    Хук: Добавляет красивые имена фикстурам в отчет.
     """
     yield
     logger = allure_reporter(request.config)
     item = logger.get_last_item()
     if item:
         scope_letter = fixturedef.scope[0].upper()
-        # Превращает 'existed_user_credentials' в 'Existed User Credentials'
         item.name = f"[{scope_letter}] " + " ".join(fixturedef.argname.split("_")).title()
 
 
 def pytest_collection_modifyitems(items):
     """
-    Хук: ДЗ Пункт 3.
-    Убирает теги 'usefixtures' из отчета Allure, чтобы не захламлять список тегов.
+    Хук: Убирает теги 'usefixtures' из отчета Allure.
     """
     for item in items:
         item.own_markers = [m for m in item.own_markers if m.name != 'usefixtures']
@@ -60,39 +75,37 @@ def pytest_collection_modifyitems(items):
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     """
-    Хук: ДЗ Пункт 2 (Attachments).
-    При падении теста делает скриншот и прикладывает его в Allure.
+    Хук: При падении UI теста делает скриншот и прикладывает его в Allure.
     """
     outcome = yield
     rep = outcome.get_result()
 
     if rep.when == 'call' and rep.failed:
         try:
-            if browser.driver:
-                # Прикладываем скриншот
+            # Проверяем, что драйвер существует и жив
+            if hasattr(browser, 'driver') and browser.driver.session_id:
                 allure.attach(
                     browser.driver.get_screenshot_as_png(),
                     name='Screenshot',
                     attachment_type=allure.attachment_type.PNG
                 )
-                # Прикладываем HTML страницы
                 allure.attach(
                     browser.driver.page_source,
                     name='Page Source',
                     attachment_type=allure.attachment_type.HTML
                 )
         except Exception as e:
-            print(f"Fail to take screenshot: {e}")
+            print(f"Browser is dead, cannot take screenshot: {e}")
 
 
 # ==========================================
-# FIXTURES
+# CONFIG FIXTURES
 # ==========================================
 
 @allure.title("Загрузка переменных окружения")
 @pytest.fixture(scope='session')
 def envs():
-    """Считываем переменные, включая настройку HEADLESS"""
+    """Считываем переменные"""
     return {
         'auth_url': os.getenv('AUTH_URL'),
         'frontend_url': os.getenv('FRONTEND_URL'),
@@ -128,16 +141,61 @@ def db():
     client.close()
 
 
+# ==========================================
+# API FIXTURES (Новый блок)
+# ==========================================
+
+@allure.title("Получение токена авторизации (API)")
+@pytest.fixture(scope='session')
+def user_token(envs, existed_user_credentials):
+    """
+    Авторизуется через API, чтобы получить токен для SpendsHttpClient.
+    Использует requests напрямую, чтобы не зависеть от UI.
+    """
+    # Предполагаемый эндпоинт логина. Если у тебя он другой, поправь путь.
+    auth_endpoint = "/api/auth/login"
+    url = urljoin(envs['auth_url'], auth_endpoint)
+
+    with allure.step(f"Auth Setup: Получение токена для {existed_user_credentials['username']}"):
+        response = requests.post(url, json=existed_user_credentials)
+        response.raise_for_status()
+
+        # Предполагаем, что токен лежит в ключе 'accessToken' или 'token'
+        data = response.json()
+        token = data.get('accessToken') or data.get('token')
+
+        if not token:
+            raise ValueError("Не удалось получить токен из ответа авторизации")
+
+        return token
+
+
+@allure.title("API клиент расходов")
+@pytest.fixture(scope='function')
+def api_spends(envs, user_token):
+    """
+    Возвращает готовый к использованию экземпляр SpendsHttpClient
+    с настроенным URL и авторизацией.
+    """
+    client = SpendsHttpClient(base_url=envs['auth_url'], token=user_token)
+    return client
+
+
+# ==========================================
+# UI FIXTURES
+# ==========================================
+
 @allure.title("Настройка браузера")
 @pytest.fixture(scope='function', autouse=True)
-def browser_setup(app_url, envs):
+def browser_setup(app_url, envs, request):
     options = Options()
 
-    if envs['headless']:
+    if envs['headless'] or request.config.getoption("--headless"):
         options.add_argument('--headless=new')
 
     options.add_argument('--no-sandbox')
     options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--disable-gpu')
     options.add_argument('--window-size=1920,1080')
 
     prefs = {
@@ -147,15 +205,11 @@ def browser_setup(app_url, envs):
     }
     options.add_experimental_option('prefs', prefs)
 
-    # Настройка Selene
     browser.config.driver_options = options
     browser.config.base_url = app_url
     browser.config.window_width = 1920
     browser.config.window_height = 1080
     browser.config.timeout = 10.0
-
-    # Добавляем логгер Selene, чтобы шаги Selene тоже попадали в отчет (опционально)
-    # browser.config._wait_decorator = support._logging.wait_with(context=allure_commons._allure.StepContext)
 
     yield
 
@@ -183,7 +237,7 @@ def category(request):
 @allure.title("Авторизация пользователя (UI)")
 @pytest.fixture(scope='function')
 def login_user(auth_page, existed_user_credentials):
-    """Логинимся и ждем"""
+    """Логинимся через браузер и ждем"""
     with allure.step("Открыть страницу авторизации и ввести данные"):
         auth_page.open_auth_page()
         auth_page.fill_username(existed_user_credentials['username'])

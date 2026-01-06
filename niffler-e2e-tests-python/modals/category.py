@@ -1,16 +1,16 @@
 from pydantic import BaseModel
 from sqlmodel import SQLModel, Field
-from tools.fakers import fake
 
 
-class Category(SQLModel, table=True):
+class CategorySQL(SQLModel, table=True):
+    __tablename__ = "category"
     id: str = Field(default=None, primary_key=True)
     name: str
     username: str
-    archived: bool
+    archived: bool = Field(default=False)
 
 
 class CategoryAdd(BaseModel):
-    name: str = Field(default_factory=fake.text)
+    name: str
     username: str | None = None
     archived: bool | None = None

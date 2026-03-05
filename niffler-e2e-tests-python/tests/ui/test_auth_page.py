@@ -58,3 +58,57 @@ class TestAuthPage:
 
         with allure.step("ОР: Открыта форма логина"):
             auth_page.login_btn.should(have.text("Log in"))
+
+
+@allure.feature("Авторизация и Регистрация")
+@allure.story("Сценарии регистрации нового пользователя")
+class TestRegistrationPage:
+
+    @allure.title("Создание нового аккаунта с валидными данными")
+    def test_create_new_account(self, auth_page):
+        username = faker.user_name()
+        password = faker.password(length=8)
+
+        with allure.step("Открыть страницу авторизации"):
+            auth_page.open_auth_page()
+
+        with allure.step("Нажать кнопку создания аккаунта"):
+            auth_page.to_register_btn.click()
+
+        with allure.step(f"Ввести логин: {username}"):
+            auth_page.username.type(username)
+
+        with allure.step("Ввести пароль"):
+            auth_page.password.type(password)
+
+        with allure.step("Подтвердить пароль"):
+            auth_page.pass_submit.type(password)
+
+        with allure.step("Нажать кнопку Sign Up"):
+            auth_page.register_btn.click()
+
+        with allure.step("ОР: Пользователь перенаправлен на страницу логина"):
+            auth_page.login_btn.should(have.text("Log in"))
+
+    @allure.title("Проверка переноса данных с экрана логина на экран регистрации")
+    def test_data_transfer_from_login_to_registration(self, auth_page):
+        username = faker.user_name()
+        password = faker.password(length=8)
+
+        with allure.step("Открыть страницу авторизации"):
+            auth_page.open_auth_page()
+
+        with allure.step(f"Ввести логин на экране логина: {username}"):
+            auth_page.username.type(username)
+
+        with allure.step("Ввести пароль на экране логина"):
+            auth_page.password.type(password)
+
+        with allure.step("Перейти на экран регистрации"):
+            auth_page.to_register_btn.click()
+
+        with allure.step("ОР: Логин перенесен на экран регистрации"):
+            auth_page.username.should(have.value(username))
+
+        with allure.step("ОР: Пароль перенесен на экран регистрации"):
+            auth_page.password.should(have.value(password))

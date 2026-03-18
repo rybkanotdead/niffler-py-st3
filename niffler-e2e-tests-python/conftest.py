@@ -1,138 +1,296 @@
-import os
+"""
+Конфигурация pytest и фикстуры для E2E тестов Niffler.
+Организована по слоям: конфигурация, БД, браузер, страницы, авторизация, генерация данных, очистка.
+"""
 import time
+from typing import Generator
+
 import pytest
-from dotenv import load_dotenv
-from selene import browser, have, be
+import allure
+from selene import browser, be
 from selenium.webdriver import ChromeOptions
 from faker import Faker
 
+from config import get_config
+from clients.api import CategoryApiClient, SpendApiClient
 from helpers.db_client import DBClient
 from pages.auth_reg_page import AuthRegistrationPage
 from pages.profile_page import ProfilePage
 from pages.spendings_page import SpendingPage
 
-load_dotenv()
-faker = Faker()
+# ============================================================================
+# ИНИЦИАЛИЗАЦИЯ
+# ============================================================================
+
+fake = Faker()
+
+
+# ============================================================================
+# SESSION SCOPE FIXTURES — конфигурация и сервисы (один раз на сессию)
+# ============================================================================
+
+@pytest.fixture(scope='session')
+def config():
+    """Загрузка конфигурации из .env."""
+    cfg = get_config()
+    with allure.step("Инициализация конфигурации"):
+        allure.attach(
+            f"Frontend: {cfg.frontend_url}\n"
+            f"Gateway: {cfg.gateway_url}\n"
+            f"DB: {cfg.pghost}:{cfg.pgport}",
+            name="environment_config",
+            attachment_type=allure.attachment_type.TEXT
+        )
+    return cfg
 
 
 @pytest.fixture(scope='session')
-def envs():
-    """Считываем переменные, включая настройку HEADLESS"""
-    return {
-        'auth_url': os.getenv('AUTH_URL'),
-        'frontend_url': os.getenv('FRONTEND_URL'),
-        'profile_url': os.getenv('PROFILE_URL'),
-        'test_username': os.getenv('TEST_USERNAME'),
-        'test_password': os.getenv('TEST_PASSWORD'),
-        'pghost': os.getenv('PGHOST'),
-        'pgport': os.getenv('PGPORT'),
-        # Считываем HEADLESS. Если в файле написано true, вернет Python-булево True
-        'headless': os.getenv('HEADLESS', 'false').lower() == 'true'
-    }
+def db(config) -> Generator[DBClient, None, None]:
+    """Клиент PostgreSQL — один на сессию."""
+    with allure.step("Подключение к БД"):
+        client = DBClient(db_url=config.spend_db_url)
+    yield client
+    with allure.step("Закрытие подключения к БД"):
+        client.close()
 
 
 @pytest.fixture(scope='session')
-def app_url(envs):
-    return envs['auth_url']
-
-
-@pytest.fixture(scope='session')
-def existed_user_credentials(envs):
-    return {
-        'username': envs['test_username'],
-        'password': envs['test_password'],
-    }
-
-
-@pytest.fixture(scope='session')
-def db():
-    client = DBClient()
+def category_api_client(config) -> Generator[CategoryApiClient, None, None]:
+    """API клиент категорий."""
+    token = "dummy_token"  # TODO: получить реальный токен через auth
+    client = CategoryApiClient(config.gateway_url, token)
     yield client
     client.close()
 
 
+@pytest.fixture(scope='session')
+def spend_api_client(config) -> Generator[SpendApiClient, None, None]:
+    """API клиент трат."""
+    token = "dummy_token"
+    client = SpendApiClient(config.gateway_url, token)
+    yield client
+    client.close()
+
+
+@pytest.fixture(scope='session')
+def category_client(category_api_client) -> CategoryApiClient:
+    """Алиас category_api_client для тестов."""
+    return category_api_client
+
+
+@pytest.fixture(scope='session')
+def spends_client(spend_api_client) -> SpendApiClient:
+    """Алиас spend_api_client для тестов."""
+    return spend_api_client
+
+
+# ============================================================================
+# FUNCTION SCOPE — браузер
+# ============================================================================
+
 @pytest.fixture(scope='function', autouse=True)
-def browser_setup(app_url, envs):
+def browser_setup(config) -> Generator[None, None, None]:
+    """Инициализация браузера перед каждым тестом (autouse)."""
     options = ChromeOptions()
 
-    # === ЛОГИКА HEADLESS ===
-    if envs['headless']:
+    if config.headless:
         options.add_argument('--headless=new')
 
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--window-size=1920,1080')
+    for arg in [
+        '--no-sandbox',
+        '--disable-dev-shm-usage',
+        f'--window-size={config.window_width},{config.window_height}',
+        '--disable-gpu',
+        '--start-maximized',
+    ]:
+        options.add_argument(arg)
 
-    prefs = {
+    options.add_experimental_option('prefs', {
         "profile.password_manager_leak_detection": False,
         "credentials_enable_service": False,
-        "password_manager_enabled": False
-    }
-    options.add_experimental_option('prefs', prefs)
+        "password_manager_enabled": False,
+    })
 
     browser.config.driver_options = options
-    browser.config.base_url = app_url
-    browser.config.window_width = 1920
-    browser.config.window_height = 1080
-    browser.config.timeout = 10.0
+    browser.config.base_url = config.auth_url
+    browser.config.window_width = config.window_width
+    browser.config.window_height = config.window_height
+    browser.config.timeout = config.browser_timeout
 
     yield
+
+    if hasattr(pytest, 'last_test_failed') and pytest.last_test_failed:
+        try:
+            allure.attach(
+                browser.driver.get_screenshot_as_png(),
+                name="screenshot_on_failure",
+                attachment_type=allure.attachment_type.PNG,
+            )
+        except Exception:
+            pass
+
     browser.quit()
 
 
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    """Хук для определения статуса теста (для скриншотов)."""
+    outcome = yield
+    rep = outcome.get_result()
+    if rep.when == "call":
+        pytest.last_test_failed = rep.failed
+
+
+# ============================================================================
+# FUNCTION SCOPE — учётные данные
+# ============================================================================
+
 @pytest.fixture(scope='function')
-def auth_page():
+def existed_user_credentials(config) -> dict:
+    """Учётные данные существующего тестового пользователя."""
+    return {
+        'username': config.test_username,
+        'password': config.test_password,
+    }
+
+
+# ============================================================================
+# FUNCTION SCOPE — Page Objects
+# ============================================================================
+
+@pytest.fixture(scope='function')
+def auth_page() -> AuthRegistrationPage:
+    """Page Object авторизации / регистрации."""
     return AuthRegistrationPage()
 
 
 @pytest.fixture(scope='function')
-def spending_page():
+def spending_page() -> SpendingPage:
+    """Page Object страницы трат."""
     return SpendingPage()
 
 
 @pytest.fixture(scope='function')
-def category(request):
-    return request.param
-
-
-@pytest.fixture(scope='function')
-def login_user(auth_page, existed_user_credentials):
-    """Логинимся и ждем"""
-    auth_page.open_auth_page()
-    auth_page.fill_username(existed_user_credentials['username'])
-    auth_page.fill_password(existed_user_credentials['password'])
-    auth_page.click_sign_up_btn()
-
-    # Пауза для обработки логина сервером
-    time.sleep(2)
-
-    return auth_page
-
-
-@pytest.fixture(scope='function')
-def profile_page(login_user, envs):
-    """Переходим в профиль по прямой ссылке"""
-    browser.open(envs['profile_url'])
+def profile_page(login_user, config) -> ProfilePage:
+    """Page Object профиля (требует авторизации)."""
+    with allure.step(f"Открытие профиля: {config.profile_url}"):
+        browser.open(config.profile_url)
     return ProfilePage()
 
 
 @pytest.fixture(scope='function')
-def generate_user_data():
-    return {
-        'username': faker.user_name(),
-        'password': faker.password(length=8),
-        'submit_pass': faker.password(length=8),
-    }
+def main_page(login_user, config):
+    """Главная страница (требует авторизации)."""
+    browser.open(config.frontend_url)
+
+
+# ============================================================================
+# FUNCTION SCOPE — авторизация
+# ============================================================================
+
+@pytest.fixture(scope='function')
+def login_user(auth_page: AuthRegistrationPage, existed_user_credentials: dict):
+    """Авторизация пользователя через UI."""
+    with allure.step(f"Авторизация: {existed_user_credentials['username']}"):
+        auth_page.open_auth_page()
+        auth_page.fill_username(existed_user_credentials['username'])
+        auth_page.fill_password(existed_user_credentials['password'])
+        auth_page.click_sign_up_btn()
+        time.sleep(2)
+    return auth_page
+
+
+# ============================================================================
+# FUNCTION SCOPE — генерация тестовых данных
+# ============================================================================
+
+@pytest.fixture(scope='function')
+def random_category_name() -> str:
+    """Случайное имя категории."""
+    return f"cat_{fake.word()}_{fake.bothify(text='####')}"
 
 
 @pytest.fixture(scope='function')
-def cleanup_spendings(spending_page):
+def generate_user_data() -> dict:
+    """Случайные данные для регистрации нового пользователя."""
+    password = fake.password(length=8, special_chars=False)
+    return {
+        'username': fake.user_name() + '_' + fake.bothify(text='####'),
+        'password': password,
+        'submit_pass': password + '_wrong',
+    }
+
+
+# ============================================================================
+# FUNCTION SCOPE — очистка (teardown)
+# ============================================================================
+
+@pytest.fixture(scope='function')
+def cleanup_categories(db: DBClient) -> Generator[list, None, None]:
+    """Очистка категорий из БД после теста."""
+    ids: list[str] = []
+    yield ids
+    with allure.step("Очистка: удаление категорий из БД"):
+        for cat_id in ids:
+            try:
+                db.delete_category_by_id(cat_id)
+            except Exception as e:
+                allure.attach(str(e), name="cleanup_error", attachment_type=allure.attachment_type.TEXT)
+
+
+@pytest.fixture(scope='function')
+def cleanup_db_categories(db: DBClient) -> Generator[list, None, None]:
+    """Алиас для cleanup_categories (обратная совместимость)."""
+    ids: list[str] = []
+    yield ids
+    with allure.step("Очистка: удаление категорий из БД"):
+        for cat_id in ids:
+            try:
+                db.delete_category_by_id(cat_id)
+            except Exception as e:
+                allure.attach(str(e), name="cleanup_error", attachment_type=allure.attachment_type.TEXT)
+
+
+@pytest.fixture(scope='function')
+def cleanup_db_spends(db: DBClient) -> Generator[list, None, None]:
+    """Очистка трат из БД после теста."""
+    ids: list[str] = []
+    yield ids
+    with allure.step("Очистка: удаление трат из БД"):
+        for spend_id in ids:
+            try:
+                db.delete_spend(spend_id)
+            except Exception as e:
+                allure.attach(str(e), name="cleanup_error", attachment_type=allure.attachment_type.TEXT)
+
+
+@pytest.fixture(scope='function')
+def cleanup_spendings(spending_page: SpendingPage) -> Generator[None, None, None]:
+    """Очистка трат через UI после теста."""
     yield
-    try:
-        if spending_page.table_checkbox.is_displayed():
-            spending_page.table_checkbox.click()
-            spending_page.table_delete_btn.click()
-            spending_page.delete_button.click()
-            spending_page.delete_alert.click()
-    except Exception:
-        pass
+    with allure.step("Очистка: удаление трат через UI"):
+        try:
+            if spending_page.table_checkbox.is_displayed():
+                spending_page.table_checkbox.click()
+                spending_page.table_delete_btn.click()
+                spending_page.delete_button.click()
+        except Exception:
+            pass
+
+
+# ============================================================================
+# PYTEST CONFIGURATION
+# ============================================================================
+
+def pytest_configure(config):
+    """Регистрация кастомных маркеров."""
+    for marker in [
+        "ui: UI тесты (Selenium/Selene)",
+        "api: API тесты (requests)",
+        "db: Тесты интеграции с БД",
+        "smoke: Smoke тесты",
+        "regression: Регрессионные тесты",
+        "integration: Интеграционные тесты",
+    ]:
+        config.addinivalue_line("markers", marker)
+

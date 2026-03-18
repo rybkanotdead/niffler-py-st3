@@ -33,7 +33,7 @@ class SpendingPage:
         self.delete_button = browser.element('//div[@role="dialog"]//button[contains(text(), "Delete")]')
         self.delete_alert = browser.element('//div[contains(text(), "Spendings succesfully deleted")]')
 
-    def fill_amount(self, amount: int):
+    def fill_amount(self, amount):
         self.amount.type(amount)
 
     def choose_usd(self):

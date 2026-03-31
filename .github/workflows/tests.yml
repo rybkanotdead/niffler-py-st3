@@ -227,11 +227,17 @@ jobs:
           allure_history: allure-history
           keep_reports: 30
 
+      - name: Add .nojekyll (required for Allure on GitHub Pages)
+        if: always()
+        run: touch allure-history/.nojekyll
+
       - name: Deploy Allure Report to GitHub Pages
         if: always()
-        uses: peaceiris/actions-gh-pages@v3
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-history
+          force_orphan: false
+          keep_files: false
 

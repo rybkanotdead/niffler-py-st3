@@ -142,11 +142,18 @@ class SpendApiClient(BaseHttpClient):
     # Алиасы для обратной совместимости
     def add_spends(self, amount: float, description: str, category: str,
                    currency: str = "RUB", spend_date: str = "2024-10-10") -> dict:
-        """Алиас add_spend с упрощённой сигнатурой."""
-        return self.add_spend(
-            amount=amount, description=description,
-            category_id=category, spend_date=spend_date, currency=currency,
-        )
+        """Алиас add_spend с упрощённой сигнатурой — принимает имя категории."""
+        url = self._build_url("/api/spends/add")
+        payload = {
+            "amount": amount,
+            "description": description,
+            "category": {"name": category},   # имя, не id
+            "spendDate": spend_date,
+            "currency": currency,
+        }
+        response = self.session.post(url, json=payload)
+        self._raise_for_status(response)
+        return response.json()
 
     def remove_spends(self, spend_ids: list) -> None:
         """Алиас delete_spends."""

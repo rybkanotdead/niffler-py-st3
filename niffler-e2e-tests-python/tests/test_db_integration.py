@@ -8,6 +8,7 @@
 """
 import pytest
 import allure
+import time
 from faker import Faker
 from selene import browser, have, be
 
@@ -241,8 +242,10 @@ class TestSpendingDatabaseIntegration:
             spending_page.fill_amount(75)
             spending_page.choose_usd()
             spending_page.fill_category('Test Category')
+            spending_page.fill_datepicker_input(full_date='10/10/2024')
             spending_page.fill_description(description)
             spending_page.add_btn.click()
+            time.sleep(2)  # ждём сохранения в БД
 
         with allure.step("Получение ID траты из БД"):
             db_spends = db.get_user_spends(username)

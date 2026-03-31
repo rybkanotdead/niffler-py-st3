@@ -15,9 +15,9 @@ class CategoryPage:
             by.xpath('//div[@role="dialog"]//button[contains(text(), "Archive")]')
         )
 
-        self.archive_icon_xpath = ".//*[local-name()='svg']//*[local-name()='path'][starts-with(@d, 'M5 8H19')]"
-
-        self.pencil_icon_xpath = ".//*[local-name()='svg']//*[local-name()='path'][starts-with(@d, 'M4 16L3')]"
+        # aria-label надёжнее SVG path — не зависит от иконки
+        self.archive_icon_xpath = './/*[@aria-label="Archive category"]'
+        self.pencil_icon_xpath = './/*[@aria-label="Edit category"]'
 
     def find_category_container(self, name: str):
         """Находит строку с категорией по тексту"""

@@ -40,3 +40,38 @@ out/
 
 ### gRPC generated files ###
 /niffler-grpc-common/src/generated/**
+
+### Python ###
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+*.egg-info/
+
+### Environment files ###
+.env
+!**/env.default
+
+### Test reports (локальные, не коммитим) ###
+allure-results/
+allure-report/
+
+### macOS ###
+.DS_Store
+**/.DS_Store
+
+### Дублирующиеся Python-файлы в корне (не являются частью проекта) ###
+/clients/
+/config/
+/conftest.py
+/helpers/
+/models/
+/pages/
+/tests/
+/poetry.lock
+/pyproject.toml
+/wiremock/.DS_Store

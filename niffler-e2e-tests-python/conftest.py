@@ -7,12 +7,19 @@ from typing import Generator
 
 import pytest
 import allure
-from selene import browser, be
+from selene import browser
+from selenium import webdriver
 from selenium.webdriver import ChromeOptions
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from faker import Faker
 
 from config import get_config
 from clients.api import CategoryApiClient, SpendApiClient
+from clients.grpc_client import CurrencyGrpcClient
+from clients.soap_client import UserdataSoapClient
+from clients.kafka_client import KafkaClient
 from helpers.db_client import DBClient
 from pages.auth_reg_page import AuthRegistrationPage
 from pages.profile_page import ProfilePage
@@ -55,19 +62,61 @@ def db(config) -> Generator[DBClient, None, None]:
 
 
 @pytest.fixture(scope='session')
-def category_api_client(config) -> Generator[CategoryApiClient, None, None]:
-    """API клиент категорий."""
-    token = "dummy_token"  # TODO: получить реальный токен через auth
-    client = CategoryApiClient(config.gateway_url, token)
+def auth_token(config) -> str:
+    """
+    Получение JWT-токена через UI авторизацию.
+    Использует отдельный экземпляр Selenium (не Selene-синглтон),
+    чтобы не конфликтовать с function-scope browser_setup.
+    Токен живёт на всю сессию — используется в API клиентах.
+    """
+    options = ChromeOptions()
+    options.add_argument('--headless=new')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.add_argument('--window-size=1920,1080')
+    options.add_experimental_option('prefs', {
+        "credentials_enable_service": False,
+        "password_manager_enabled": False,
+    })
+
+    driver = webdriver.Chrome(options=options)
+    token = ""
+    try:
+        driver.get(f"{config.auth_url}/login")
+        wait = WebDriverWait(driver, 15)
+        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, 'input[name=username]')))
+        driver.find_element(By.CSS_SELECTOR, 'input[name=username]').send_keys(config.test_username)
+        driver.find_element(By.CSS_SELECTOR, 'input[name=password]').send_keys(config.test_password)
+        driver.find_element(By.CSS_SELECTOR, 'button[type=submit]').click()
+        # Ждём перехода на главную страницу
+        wait.until(EC.presence_of_element_located((By.ID, 'spendings')))
+        token = driver.execute_script('return window.localStorage.getItem("id_token")') or ""
+        with allure.step("Токен авторизации получен"):
+            allure.attach(
+                f"Token length: {len(token)} chars",
+                name="auth_token_info",
+                attachment_type=allure.attachment_type.TEXT,
+            )
+    except Exception as e:
+        allure.attach(str(e), name="auth_token_error", attachment_type=allure.attachment_type.TEXT)
+    finally:
+        driver.quit()
+
+    return token
+
+
+@pytest.fixture(scope='session')
+def category_api_client(config, auth_token) -> Generator[CategoryApiClient, None, None]:
+    """API клиент категорий (с реальным JWT-токеном)."""
+    client = CategoryApiClient(config.gateway_url, auth_token)
     yield client
     client.close()
 
 
 @pytest.fixture(scope='session')
-def spend_api_client(config) -> Generator[SpendApiClient, None, None]:
-    """API клиент трат."""
-    token = "dummy_token"
-    client = SpendApiClient(config.gateway_url, token)
+def spend_api_client(config, auth_token) -> Generator[SpendApiClient, None, None]:
+    """API клиент трат (с реальным JWT-токеном)."""
+    client = SpendApiClient(config.gateway_url, auth_token)
     yield client
     client.close()
 
@@ -84,18 +133,37 @@ def spends_client(spend_api_client) -> SpendApiClient:
     return spend_api_client
 
 
+@pytest.fixture(scope='session')
+def grpc_client(config) -> Generator[CurrencyGrpcClient, None, None]:
+    """gRPC клиент для Currency сервиса (порт 8092)."""
+    client = CurrencyGrpcClient(host=config.grpc_host, port=config.grpc_port)
+    yield client
+    client.close()
+
+
+@pytest.fixture(scope='session')
+def soap_client(config) -> Generator[UserdataSoapClient, None, None]:
+    """SOAP клиент для Userdata сервиса (порт 8089/ws)."""
+    client = UserdataSoapClient(soap_url=config.soap_url)
+    yield client
+    client.close()
+
+
+@pytest.fixture(scope='session')
+def kafka_client(config) -> KafkaClient:
+    """Kafka клиент для топика 'users'."""
+    return KafkaClient(bootstrap_servers=config.kafka_bootstrap_servers)
+
+
 # ============================================================================
 # FUNCTION SCOPE — браузер
 # ============================================================================
 
-@pytest.fixture(scope='function', autouse=True)
-def browser_setup(config) -> Generator[None, None, None]:
-    """Инициализация браузера перед каждым тестом (autouse)."""
+def _build_chrome_options(config) -> ChromeOptions:
+    """Вспомогательная функция сборки опций Chrome."""
     options = ChromeOptions()
-
     if config.headless:
         options.add_argument('--headless=new')
-
     for arg in [
         '--no-sandbox',
         '--disable-dev-shm-usage',
@@ -104,14 +172,21 @@ def browser_setup(config) -> Generator[None, None, None]:
         '--start-maximized',
     ]:
         options.add_argument(arg)
-
     options.add_experimental_option('prefs', {
         "profile.password_manager_leak_detection": False,
         "credentials_enable_service": False,
         "password_manager_enabled": False,
     })
+    return options
 
-    browser.config.driver_options = options
+
+@pytest.fixture(scope='function')
+def browser_setup(config) -> Generator[None, None, None]:
+    """
+    Инициализация браузера (Selene) перед UI тестом.
+    НЕ autouse — запускается только для тестов, использующих auth_page/spending_page.
+    """
+    browser.config.driver_options = _build_chrome_options(config)
     browser.config.base_url = config.auth_url
     browser.config.window_width = config.window_width
     browser.config.window_height = config.window_height
@@ -156,16 +231,18 @@ def existed_user_credentials(config) -> dict:
 
 # ============================================================================
 # FUNCTION SCOPE — Page Objects
+# Каждый page object явно зависит от browser_setup,
+# поэтому Chrome запускается только для UI-тестов.
 # ============================================================================
 
 @pytest.fixture(scope='function')
-def auth_page() -> AuthRegistrationPage:
+def auth_page(browser_setup) -> AuthRegistrationPage:
     """Page Object авторизации / регистрации."""
     return AuthRegistrationPage()
 
 
 @pytest.fixture(scope='function')
-def spending_page() -> SpendingPage:
+def spending_page(browser_setup) -> SpendingPage:
     """Page Object страницы трат."""
     return SpendingPage()
 
@@ -212,7 +289,10 @@ def random_category_name() -> str:
 
 @pytest.fixture(scope='function')
 def generate_user_data() -> dict:
-    """Случайные данные для регистрации нового пользователя."""
+    """Случайные данные для нового пользователя.
+    submit_pass содержит неверный пароль — используется в тестах на несовпадение паролей.
+    Для тестов регистрации с совпадающими паролями используйте 'password' дважды.
+    """
     password = fake.password(length=8, special_chars=False)
     return {
         'username': fake.user_name() + '_' + fake.bothify(text='####'),
@@ -227,20 +307,7 @@ def generate_user_data() -> dict:
 
 @pytest.fixture(scope='function')
 def cleanup_categories(db: DBClient) -> Generator[list, None, None]:
-    """Очистка категорий из БД после теста."""
-    ids: list[str] = []
-    yield ids
-    with allure.step("Очистка: удаление категорий из БД"):
-        for cat_id in ids:
-            try:
-                db.delete_category_by_id(cat_id)
-            except Exception as e:
-                allure.attach(str(e), name="cleanup_error", attachment_type=allure.attachment_type.TEXT)
-
-
-@pytest.fixture(scope='function')
-def cleanup_db_categories(db: DBClient) -> Generator[list, None, None]:
-    """Алиас для cleanup_categories (обратная совместимость)."""
+    """Очистка категорий из БД после теста. Принимает список ID для удаления."""
     ids: list[str] = []
     yield ids
     with allure.step("Очистка: удаление категорий из БД"):
@@ -253,7 +320,7 @@ def cleanup_db_categories(db: DBClient) -> Generator[list, None, None]:
 
 @pytest.fixture(scope='function')
 def cleanup_db_spends(db: DBClient) -> Generator[list, None, None]:
-    """Очистка трат из БД после теста."""
+    """Очистка трат из БД после теста. Принимает список ID для удаления."""
     ids: list[str] = []
     yield ids
     with allure.step("Очистка: удаление трат из БД"):
@@ -288,6 +355,9 @@ def pytest_configure(config):
         "ui: UI тесты (Selenium/Selene)",
         "api: API тесты (requests)",
         "db: Тесты интеграции с БД",
+        "grpc: gRPC тесты (Currency сервис)",
+        "soap: SOAP тесты (Userdata сервис)",
+        "kafka: Kafka тесты (топик users)",
         "smoke: Smoke тесты",
         "regression: Регрессионные тесты",
         "integration: Интеграционные тесты",

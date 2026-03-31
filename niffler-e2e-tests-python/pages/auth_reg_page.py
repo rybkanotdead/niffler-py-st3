@@ -25,6 +25,10 @@ class AuthRegistrationPage:
     def open_register_page(self):
         return browser.open('/register')
 
+    def go_to_register_page(self):
+        """Переход на страницу регистрации через кнопку на форме логина."""
+        return self.to_register_btn.click()
+
     def fill_username(self, username: str):
         return self.username.type(username)
 
@@ -45,6 +49,16 @@ class AuthRegistrationPage:
 
     def click_on_submit_eye(self):
         return self.eye_submit_pass_btn.click()
+
+    def fill_register_form(self, username: str, password: str, submit_password: str):
+        """Заполнение формы регистрации."""
+        self.fill_username(username)
+        self.fill_password(password)
+        self.submit_password(submit_password)
+
+    def submit_register_form(self):
+        """Отправка формы регистрации."""
+        return self.register_btn.click()
 
     def login(self):
         self.open_auth_page()

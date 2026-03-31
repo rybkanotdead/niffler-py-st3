@@ -1,0 +1,1 @@
+{'id': '035d406d-0933-43ba-ab21-6abc0fc7037a', 'username': 'rybkanotdead', 'fullname': 'rharris', 'currency': 'RUB', 'friendshipStatus': 'VOID'}

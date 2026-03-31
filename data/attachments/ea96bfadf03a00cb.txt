@@ -1,0 +1,3 @@
+Frontend: http://frontend.niffler.dc
+Gateway: http://gateway.niffler.dc:8090
+DB: localhost:5432

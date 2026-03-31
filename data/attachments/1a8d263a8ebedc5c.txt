@@ -1,0 +1,1 @@
+WARNING  kafka.coordinator.consumer:consumer.py:131 group_id is None: disabling auto-commit.

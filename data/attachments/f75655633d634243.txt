@@ -1,0 +1,6 @@
+✅ auth
+✅ frontend
+✅ gateway
+✅ grpc
+✅ soap
+✅ kafka

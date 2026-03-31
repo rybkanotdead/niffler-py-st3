@@ -1,0 +1,237 @@
+name: Niffler E2E Tests
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'niffler-e2e-tests-python/**'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'niffler-e2e-tests-python/**'
+  workflow_dispatch:
+    inputs:
+      test_marks:
+        description: 'Маркеры тестов (например: smoke, api, grpc, soap, kafka)'
+        required: false
+        default: ''
+      parallelism:
+        description: 'Количество параллельных процессов'
+        required: false
+        default: '2'
+
+env:
+  PYTHON_VERSION: '3.11'
+  WORKING_DIR: niffler-e2e-tests-python
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # JOB 1: Lint & Static checks
+  # ─────────────────────────────────────────────────────────────
+  lint:
+    name: 🔍 Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: pip install flake8 pyproject.toml 2>/dev/null || pip install flake8
+
+      - name: Run flake8
+        run: flake8 . --max-line-length=120 --exclude=__pycache__,clients/grpc_stubs,.venv || true
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 2: Run Tests
+  # ─────────────────────────────────────────────────────────────
+  tests:
+    name: 🧪 Run E2E Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    defaults:
+      run:
+        working-directory: ${{ env.WORKING_DIR }}
+
+    services:
+      # PostgreSQL (niffler-spend DB)
+      postgres:
+        image: postgres:14
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: niffler-spend
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      # Kafka + Zookeeper
+      zookeeper:
+        image: confluentinc/cp-zookeeper:7.3.2
+        env:
+          ZOOKEEPER_CLIENT_PORT: 2181
+          ZOOKEEPER_TICK_TIME: 2000
+
+      kafka:
+        image: confluentinc/cp-kafka:7.3.2
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_BROKER_ID: 1
+          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+        options: >-
+          --health-cmd "kafka-topics --bootstrap-server localhost:9092 --list"
+          --health-interval 30s
+          --health-timeout 10s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install Chrome & ChromeDriver
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pytest selene selenium python-dotenv faker pytest-xdist \
+                      requests pydantic urllib3 psycopg2-binary sqlalchemy sqlmodel \
+                      allure-pytest grpcio grpcio-tools protobuf zeep kafka-python
+
+      - name: Generate gRPC stubs
+        run: |
+          python3 -m grpc_tools.protoc \
+            -I clients/grpc_stubs \
+            --python_out=clients/grpc_stubs \
+            --grpc_python_out=clients/grpc_stubs \
+            clients/grpc_stubs/niffler-currency.proto
+
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          AUTH_URL=${{ secrets.AUTH_URL || 'http://localhost:9000' }}
+          FRONTEND_URL=${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
+          GATEWAY_URL=${{ secrets.GATEWAY_URL || 'http://localhost:8080' }}
+          PROFILE_URL=${{ secrets.PROFILE_URL || 'http://localhost:3000/profile' }}
+          SPEND_DB_URL=postgresql://postgres:secret@localhost:5432/niffler-spend
+          GRPC_HOST=localhost
+          GRPC_PORT=8092
+          SOAP_URL=http://localhost:8089/ws
+          KAFKA_BOOTSTRAP_SERVERS=localhost:9092
+          TEST_USERNAME=${{ secrets.TEST_USERNAME || 'testuser' }}
+          TEST_PASSWORD=${{ secrets.TEST_PASSWORD || 'testpass' }}
+          HEADLESS=true
+          EOF
+
+      - name: Run tests
+        run: |
+          MARKS="${{ github.event.inputs.test_marks }}"
+          PARALLEL="${{ github.event.inputs.parallelism || '2' }}"
+
+          if [ -n "$MARKS" ]; then
+            python3 -m pytest tests/ -m "$MARKS" \
+              -n "$PARALLEL" \
+              --alluredir=allure-results \
+              --tb=short \
+              -v \
+              || true
+          else
+            python3 -m pytest tests/ \
+              -n "$PARALLEL" \
+              --alluredir=allure-results \
+              --tb=short \
+              -v \
+              || true
+          fi
+
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results
+          path: ${{ env.WORKING_DIR }}/allure-results
+          retention-days: 30
+
+  # ─────────────────────────────────────────────────────────────
+  # JOB 3: Publish Allure Report to GitHub Pages
+  # ─────────────────────────────────────────────────────────────
+  allure-report:
+    name: 📊 Publish Allure Report
+    runs-on: ubuntu-latest
+    needs: tests
+    if: always()
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Allure results
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+
+      - name: Get Allure history
+        uses: actions/checkout@v4
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Generate Allure Report
+        uses: simple-elf/allure-report-action@master
+        if: always()
+        with:
+          allure_results: allure-results
+          allure_history: allure-history
+          keep_reports: 30
+
+      - name: Deploy Allure Report to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
+

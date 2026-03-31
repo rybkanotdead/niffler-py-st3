@@ -3,7 +3,9 @@
 Организована по слоям: конфигурация, БД, браузер, страницы, авторизация, генерация данных, очистка.
 """
 import time
+import socket
 from typing import Generator
+from urllib.parse import urlparse
 
 import pytest
 import allure
@@ -33,6 +35,56 @@ fake = Faker()
 
 
 # ============================================================================
+# HELPERS — проверка доступности сервисов
+# ============================================================================
+
+def _is_port_open(host: str, port: int, timeout: float = 2.0) -> bool:
+    """Проверяет, открыт ли TCP-порт на хосте."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (OSError, ConnectionRefusedError, TimeoutError):
+        return False
+
+
+def _url_to_host_port(url: str) -> tuple:
+    """Извлекает (host, port) из URL вида http://localhost:9000."""
+    parsed = urlparse(url)
+    host = parsed.hostname or 'localhost'
+    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    return host, int(port)
+
+
+# Модульный кэш — порты проверяются ровно ОДИН раз за весь прогон
+_SERVICES_CACHE: dict | None = None
+
+
+def _get_services_status(config) -> dict:
+    """Возвращает словарь доступности сервисов (кэширует результат)."""
+    global _SERVICES_CACHE
+    if _SERVICES_CACHE is not None:
+        return _SERVICES_CACHE
+
+    kafka_host, kafka_port = 'localhost', 9092
+    if config.kafka_bootstrap_servers:
+        parts = config.kafka_bootstrap_servers.split(':')
+        kafka_host = parts[0]
+        kafka_port = int(parts[1]) if len(parts) > 1 else 9092
+
+    soap_host, soap_port = _url_to_host_port(config.soap_url)
+
+    _SERVICES_CACHE = {
+        'auth':     _is_port_open(*_url_to_host_port(config.auth_url)),
+        'frontend': _is_port_open(*_url_to_host_port(config.frontend_url)),
+        'gateway':  _is_port_open(*_url_to_host_port(config.gateway_url)),
+        'grpc':     _is_port_open(config.grpc_host, config.grpc_port),
+        'soap':     _is_port_open(soap_host, soap_port),
+        'kafka':    _is_port_open(kafka_host, kafka_port),
+    }
+    return _SERVICES_CACHE
+
+
+# ============================================================================
 # SESSION SCOPE FIXTURES — конфигурация и сервисы (один раз на сессию)
 # ============================================================================
 
@@ -49,6 +101,60 @@ def config():
             attachment_type=allure.attachment_type.TEXT
         )
     return cfg
+
+
+@pytest.fixture(scope='session')
+def _services(config) -> dict:
+    """
+    Проверяет доступность всех внешних сервисов один раз за сессию.
+    Использует модульный кэш — повторные TCP-проверки не выполняются.
+    """
+    status = _get_services_status(config)
+    summary = '\n'.join(f"{'✅' if v else '❌'} {k}" for k, v in status.items())
+    print(f"\n[services]\n{summary}")  # видно в pytest -s
+    try:
+        allure.attach(
+            summary,
+            name="services_availability",
+            attachment_type=allure.attachment_type.TEXT,
+        )
+    except Exception:
+        pass
+    return status
+
+
+# Фикстуры, для которых нужен auth/frontend
+_UI_FIXTURES = frozenset({
+    'auth_page', 'spending_page', 'profile_page', 'login_user',
+    'browser_setup', 'auth_token',
+    'category_api_client', 'spend_api_client',
+    'category_client', 'spends_client',
+})
+
+
+@pytest.fixture(scope='function', autouse=True)
+def _auto_skip(request, _services):
+    """
+    Автоматически пропускает тест (SKIP), если нужный сервис недоступен.
+    Предотвращает красные ERROR/FAILED в Allure при отсутствии окружения.
+    """
+    markers = {m.name for m in request.node.iter_markers()}
+    fixtures = set(request.fixturenames)
+
+    if 'grpc' in markers and not _services['grpc']:
+        pytest.skip("⏭ gRPC сервис недоступен")
+
+    if 'soap' in markers and not _services['soap']:
+        pytest.skip("⏭ SOAP сервис недоступен")
+
+    if 'kafka' in markers and not _services['kafka']:
+        pytest.skip("⏭ Kafka недоступна")
+
+    if 'api' in markers and not _services['gateway']:
+        pytest.skip("⏭ Gateway API недоступен")
+
+    if fixtures & _UI_FIXTURES and not _services['auth']:
+        pytest.skip("⏭ Auth/Frontend сервис недоступен — UI/API тесты пропущены")
 
 
 @pytest.fixture(scope='session')
@@ -69,6 +175,10 @@ def auth_token(config) -> str:
     чтобы не конфликтовать с function-scope browser_setup.
     Токен живёт на всю сессию — используется в API клиентах.
     """
+    # Не запускаем Chrome если auth-сервис недоступен
+    if not _get_services_status(config).get('auth', False):
+        pytest.skip("⏭ Auth сервис недоступен — пропуск теста")
+
     options = ChromeOptions()
     options.add_argument('--headless=new')
     options.add_argument('--no-sandbox')
@@ -136,6 +246,8 @@ def spends_client(spend_api_client) -> SpendApiClient:
 @pytest.fixture(scope='session')
 def grpc_client(config) -> Generator[CurrencyGrpcClient, None, None]:
     """gRPC клиент для Currency сервиса (порт 8092)."""
+    if not _get_services_status(config).get('grpc', False):
+        pytest.skip(f"⏭ gRPC сервис недоступен ({config.grpc_host}:{config.grpc_port})")
     client = CurrencyGrpcClient(host=config.grpc_host, port=config.grpc_port)
     yield client
     client.close()
@@ -144,6 +256,8 @@ def grpc_client(config) -> Generator[CurrencyGrpcClient, None, None]:
 @pytest.fixture(scope='session')
 def soap_client(config) -> Generator[UserdataSoapClient, None, None]:
     """SOAP клиент для Userdata сервиса (порт 8089/ws)."""
+    if not _get_services_status(config).get('soap', False):
+        pytest.skip(f"⏭ SOAP сервис недоступен ({config.soap_url})")
     client = UserdataSoapClient(soap_url=config.soap_url)
     yield client
     client.close()
@@ -152,6 +266,8 @@ def soap_client(config) -> Generator[UserdataSoapClient, None, None]:
 @pytest.fixture(scope='session')
 def kafka_client(config) -> KafkaClient:
     """Kafka клиент для топика 'users'."""
+    if not _get_services_status(config).get('kafka', False):
+        pytest.skip(f"⏭ Kafka недоступна ({config.kafka_bootstrap_servers})")
     return KafkaClient(bootstrap_servers=config.kafka_bootstrap_servers)
 
 
@@ -186,6 +302,9 @@ def browser_setup(config) -> Generator[None, None, None]:
     Инициализация браузера (Selene) перед UI тестом.
     НЕ autouse — запускается только для тестов, использующих auth_page/spending_page.
     """
+    if not _get_services_status(config).get('auth', False):
+        pytest.skip("⏭ Auth/Frontend сервис недоступен — UI тест пропущен")
+
     browser.config.driver_options = _build_chrome_options(config)
     browser.config.base_url = config.auth_url
     browser.config.window_width = config.window_width
@@ -363,4 +482,43 @@ def pytest_configure(config):
         "integration: Интеграционные тесты",
     ]:
         config.addinivalue_line("markers", marker)
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    Помечает тесты как SKIP до запуска, если нужный сервис недоступен.
+    Работает корректно и с pytest-xdist (-n N).
+    """
+    cfg = get_config()
+    svc = _get_services_status(cfg)
+
+    # Фикстуры, которые тянут за собой auth/UI
+    ui_fixtures = frozenset({
+        'auth_page', 'spending_page', 'profile_page', 'login_user',
+        'browser_setup', 'auth_token',
+        'category_api_client', 'spend_api_client',
+        'category_client', 'spends_client',
+    })
+
+    mark_service = {
+        'grpc':  ('grpc',    "gRPC сервис недоступен"),
+        'soap':  ('soap',    "SOAP сервис недоступен"),
+        'kafka': ('kafka',   "Kafka недоступна"),
+        'api':   ('gateway', "Gateway API недоступен"),
+    }
+
+    for item in items:
+        markers = {m.name for m in item.iter_markers()}
+        fixtures = set(getattr(item, 'fixturenames', []))
+
+        # Проверка по маркерам
+        for mark, (service, reason) in mark_service.items():
+            if mark in markers and not svc.get(service, True):
+                item.add_marker(pytest.mark.skip(reason=f"⏭ {reason}"))
+                break
+
+        # Проверка UI/auth фикстур
+        if fixtures & ui_fixtures and not svc.get('auth', True):
+            item.add_marker(pytest.mark.skip(reason="⏭ Auth/Frontend сервис недоступен"))
+
 

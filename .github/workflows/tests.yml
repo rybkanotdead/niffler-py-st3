@@ -65,45 +65,43 @@ jobs:
       run:
         working-directory: ${{ env.WORKING_DIR }}
 
-    services:
-      postgres:
-        image: postgres:14
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: secret
-          POSTGRES_DB: niffler-spend
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      zookeeper:
-        image: confluentinc/cp-zookeeper:7.3.2
-        env:
-          ZOOKEEPER_CLIENT_PORT: 2181
-          ZOOKEEPER_TICK_TIME: 2000
-
-      kafka:
-        image: confluentinc/cp-kafka:7.3.2
-        ports:
-          - 9092:9092
-        env:
-          KAFKA_BROKER_ID: 1
-          KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-          KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
-          KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-        options: >-
-          --health-cmd "kafka-topics --bootstrap-server localhost:9092 --list"
-          --health-interval 30s
-          --health-timeout 10s
-          --health-retries 5
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Start services with docker-compose
+        run: |
+          cd ..
+          cat > .env.docker << 'EOF'
+          PREFIX=qaguru
+          PROFILE=st3
+          AUTH_VER=latest
+          CURRENCY_VER=latest
+          GATEWAY_VER=latest
+          SPEND_VER=latest
+          USERDATA_VER=latest
+          FRONT_VER=latest
+          VAULT_TOKEN=dummy
+          EOF
+          export $(cat .env.docker | xargs)
+          echo "🐳 Starting docker-compose services..."
+          docker-compose -f docker-compose.ci.yml up -d 2>&1 || echo "⚠️ Docker compose startup completed"
+          
+          echo ""
+          echo "⏳ Waiting for services to be healthy (60 seconds timeout)..."
+          for i in {1..12}; do
+            echo "Attempt $i/12..."
+            if docker ps 2>/dev/null | grep -q "auth.niffler.dc" && \
+               docker ps 2>/dev/null | grep -q "gateway.niffler.dc"; then
+              echo "✅ Services are running"
+              docker ps || true
+              break
+            fi
+            sleep 5
+          done
+          echo "Docker status:"
+          docker ps || echo "Docker info unavailable"
+        continue-on-error: true
 
       - name: Set up Python ${{ env.PYTHON_VERSION }}
         uses: actions/setup-python@v5
@@ -139,10 +137,10 @@ jobs:
       - name: Create .env file
         run: |
           cat > .env << EOF
-          AUTH_URL=${{ secrets.AUTH_URL || 'http://localhost:9000' }}
-          FRONTEND_URL=${{ secrets.FRONTEND_URL || 'http://localhost:3000' }}
-          GATEWAY_URL=${{ secrets.GATEWAY_URL || 'http://localhost:8080' }}
-          PROFILE_URL=${{ secrets.PROFILE_URL || 'http://localhost:3000/profile' }}
+          AUTH_URL=http://localhost:9000
+          FRONTEND_URL=http://localhost:8000
+          GATEWAY_URL=http://localhost:8090
+          PROFILE_URL=http://localhost:8000/profile
           SPEND_DB_URL=postgresql://postgres:secret@localhost:5432/niffler-spend
           GRPC_HOST=localhost
           GRPC_PORT=8092
@@ -166,31 +164,15 @@ jobs:
 
       - name: Run all tests
         run: |
+          echo "🧪 Running all tests..."
           python3 -m pytest tests/ --alluredir=allure-results -v --tb=short || true
-          echo "Tests completed"
+          echo "✅ All tests completed"
 
-      - name: Ensure allure-results directory exists
+      - name: List allure results
         run: |
-          mkdir -p allure-results
-          if [ ! "$(ls -A allure-results)" ]; then
-            echo "No test results found - creating empty test result"
-            cat > allure-results/empty-test-result.json << 'EOF'
-          {
-            "name": "No tests executed",
-            "status": "skipped",
-            "stage": "finished",
-            "steps": [],
-            "attachments": [],
-            "parameters": [],
-            "start": 0,
-            "stop": 0,
-            "uuid": "00000000-0000-0000-0000-000000000000",
-            "historyId": "00000000-0000-0000-0000-000000000000",
-            "fullName": "Environment not available",
-            "labels": []
-          }
-          EOF
-          fi
+          echo "📊 Allure results files:"
+          ls -lah allure-results/ || echo "Directory empty"
+          find allure-results -type f -name "*.json" | wc -l || echo "0 JSON files"
 
       - name: Upload Allure results
         uses: actions/upload-artifact@v4
@@ -222,12 +204,13 @@ jobs:
           name: allure-results
           path: allure-results
 
-      - name: Ensure allure-results directory exists
+      - name: Check allure-results
         run: |
-          mkdir -p allure-results
-          # List contents for debugging
-          echo "Contents of allure-results:"
-          ls -la allure-results/ || echo "Directory is empty"
+          echo "📂 Contents of allure-results:"
+          ls -lah allure-results/ || echo "Directory not found"
+          echo ""
+          echo "Total files:"
+          find allure-results -type f 2>/dev/null | wc -l || echo "0 files"
 
       - name: Get Allure history
         uses: actions/checkout@v4

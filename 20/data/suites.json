@@ -1,0 +1,1 @@
+{"uid":"98d3104e051c652961429bf95fa0b5d6","children":[{"name":"No tests executed","uid":"fdcc772469fc810e","parentUid":"98d3104e051c652961429bf95fa0b5d6","status":"skipped","time":{"start":0,"stop":0,"duration":0},"flaky":false,"newFailed":false,"newPassed":false,"newBroken":false,"retriesCount":0,"retriesStatusChange":false,"parameters":[],"tags":[]}],"name":"suites"}

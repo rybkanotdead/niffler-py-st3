@@ -181,7 +181,6 @@ jobs:
       - name: 🚀 Run ALL tests with Allure reporting
         run: |
           echo "🧪 Running all 72 tests..."
-          cd niffler-e2e-tests-python
           
           # First, list all tests that will be collected
           echo "Tests to be collected:"
@@ -202,7 +201,6 @@ jobs:
 
       - name: 📊 Check Allure Results
         run: |
-          cd niffler-e2e-tests-python
           echo "Checking allure-results directory:"
           echo "Current working directory: $(pwd)"
           echo ""
@@ -217,7 +215,6 @@ jobs:
 
       - name: Copy allure-results for upload
         run: |
-          cd niffler-e2e-tests-python
           echo "Preparing artifacts for upload..."
           echo "Current directory: $(pwd)"
           

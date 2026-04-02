@@ -5,10 +5,12 @@ on:
     branches: [ main, master ]
     paths:
       - 'niffler-e2e-tests-python/**'
+      - '.github/workflows/**'
   pull_request:
     branches: [ main, master ]
     paths:
       - 'niffler-e2e-tests-python/**'
+      - '.github/workflows/**'
   workflow_dispatch:
     inputs:
       test_marks:

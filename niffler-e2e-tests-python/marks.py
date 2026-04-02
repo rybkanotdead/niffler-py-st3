@@ -4,7 +4,8 @@ import pytest
 class Pages:
     """Декораторы для пометки тестов страниц."""
     main_page = pytest.mark.usefixtures("main_page")
-    profile_page = pytest.mark.usefixtures("auth_page", "profile_page")
+    # profile_page автоматически вытянет login_user -> auth_page -> browser_setup
+    profile_page = pytest.mark.usefixtures("profile_page")
 
 
 class TestData:

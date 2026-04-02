@@ -465,6 +465,28 @@ def cleanup_spendings(spending_page: SpendingPage) -> Generator[None, None, None
 
 
 # ============================================================================
+# FUNCTION SCOPE — инициализация тестовых данных
+# ============================================================================
+
+@pytest.fixture(scope='function')
+def setup_test_categories(db: DBClient, existed_user_credentials: dict, config) -> None:
+    """Создает стандартные категории для тестов перед каждым тестом."""
+    username = existed_user_credentials['username']
+    test_categories = ['abc', 'delete_test', 'Rich', 'Test Category']
+    
+    with allure.step("Создание тестовых категорий"):
+        for cat_name in test_categories:
+            existing = db.get_category(username, cat_name)
+            if not existing:
+                db.insert_category(username, cat_name)
+                allure.attach(f"Created category: {cat_name}", name="test_category", attachment_type=allure.attachment_type.TEXT)
+    
+    # Открываем страницу добавления трат чтобы загрузились категории
+    with allure.step("Загрузка категорий на странице"):
+        browser.open(f"{config.frontend_url}/spending")
+
+
+# ============================================================================
 # PYTEST CONFIGURATION
 # ============================================================================
 

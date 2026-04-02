@@ -1,5 +1,6 @@
 from selenium.webdriver import Keys
-from selene import browser, by
+from selene import browser, by, be
+import time
 
 
 class SpendingPage:
@@ -34,14 +35,49 @@ class SpendingPage:
         self.delete_alert = browser.element('//div[contains(text(), "Spendings succesfully deleted")]')
 
     def fill_amount(self, amount):
-        self.amount.type(amount)
+        # Очищаем поле перед вводом
+        self.amount.click()
+        self.amount.clear()
+        self.amount.type(str(amount))
 
     def choose_usd(self):
         self.currency.click()
         self.usd_btn.click()
 
     def fill_category(self, category: str):
-        self.category.type(category)
+        """
+        Выбирает категорию из чипсов, уже видимых на форме.
+        Ищет button с текстом категории и кликает прямо на него.
+        """
+        time.sleep(1)  # Даем форме время на загрузку
+        
+        # Пытаемся найти чип категории с разными селекторами
+        category_chip = None
+        
+        try:
+            # Первый вариант - точное совпадение текста
+            category_chip = browser.element(by.xpath(f'//button[normalize-space(.) = "{category}"]'))
+            category_chip.should(be.visible)
+        except:
+            try:
+                # Второй вариант - кнопка с содержанием текста
+                category_chip = browser.element(by.xpath(f'//button[contains(., "{category}")]'))
+                category_chip.should(be.visible)
+            except:
+                try:
+                    # Третий вариант - span/div с текстом категории внутри button
+                    category_chip = browser.element(by.xpath(f'//*[contains(text(), "{category}")]/..'))
+                    category_chip.should(be.visible)
+                except:
+                    # Последний вариант - ищем по value атрибуту
+                    category_chip = browser.element(by.xpath(f'//button[@value="{category}"]'))
+                    category_chip.should(be.visible)
+        
+        # Кликаем на найденный элемент
+        if category_chip:
+            category_chip.click()
+        else:
+            raise Exception(f"Could not find category button for '{category}'")
 
     def fill_datepicker_input(self, full_date: str):
         self.datepicker_input.send_keys(Keys.COMMAND + 'a')
@@ -65,3 +101,9 @@ class SpendingPage:
 
     def click_on_cancel(self):
         self.cancel_btn.click()
+
+    def select_spending_by_description(self, description: str):
+        """Выбирает трату по описанию (находит строку и кликает на checkbox)."""
+        row = browser.element(by.xpath(f'//td[contains(text(), "{description}")]/parent::tr'))
+        checkbox = row.element('input[type="checkbox"]')
+        checkbox.click()

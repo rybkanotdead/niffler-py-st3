@@ -27,6 +27,7 @@ class TestAuthPage:
         auth_page.fill_username(username=faker.user_name())
         auth_page.fill_password(password=faker.password())
         auth_page.login_btn.click()
+        # Ждем появления сообщения об ошибке (может быть на английском или русском)
         auth_page.form_error.should(be.visible)
 
 

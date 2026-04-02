@@ -7,8 +7,8 @@ readme = "README.md"
 requires-python = ">=3.11,<4.0"
 dependencies = [
     "pytest (>=7.0.0,<8.0.0)",
-    "selene (>=2.0.0)",
-    "selenium (>=4.15.0,<4.26.0)",
+    "selene (>=2.0.0,<3.0.0)",
+    "selenium (>=4.15.0,<4.24.0)",
     "python-dotenv (>=1.0.0,<2.0.0)",
     "faker (>=20.0.0,<30.0.0)",
     "pytest-xdist (>=3.0.0,<4.0.0)",
@@ -19,9 +19,9 @@ dependencies = [
     "sqlalchemy (>=2.0.0,<3.0.0)",
     "sqlmodel (>=0.0.14,<0.1.0)",
     "allure-pytest (>=2.13.0,<3.0.0)",
-    "grpcio (>=1.50.0)",
-    "grpcio-tools (>=1.50.0)",
-    "protobuf (>=4.0.0)",
+    "grpcio (>=1.60.0)",
+    "grpcio-tools (>=1.60.0)",
+    "protobuf (>=4.24.0)",
     "zeep (>=4.2.0)",
     "kafka-python (>=2.0.0)"
 ]

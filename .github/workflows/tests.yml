@@ -156,7 +156,15 @@ jobs:
       - name: Create allure-results directory
         run: mkdir -p allure-results
 
-      - name: Run tests
+      - name: Run smoke tests (always runs)
+        run: |
+          echo "🚀 Running smoke tests..."
+          python3 -m pytest tests/test_smoke.py \
+            --alluredir=allure-results \
+            -v || true
+          echo "✅ Smoke tests done"
+
+      - name: Run all tests
         run: |
           python3 -m pytest tests/ --alluredir=allure-results -v --tb=short || true
           echo "Tests completed"

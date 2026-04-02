@@ -160,50 +160,37 @@ jobs:
           EOF
 
       - name: Create allure-results directory
-        run: |
-          pwd
-          mkdir -p allure-results
-          echo "📁 Created allure-results in: $(pwd)/allure-results"
+        run: mkdir -p allure-results
 
-      - name: Run tests
+      - name: Run smoke tests (always runs, no conftest dependencies)
         run: |
-          echo "📂 Current working directory: $(pwd)"
-          echo "📂 Directory structure:"
-          ls -la .
-          
+          echo "🚀 Running smoke tests with --noconftest..."
+          python3 -m pytest tests/test_smoke.py \
+            --noconftest \
+            --alluredir=allure-results \
+            --tb=short \
+            -v \
+            || true
+          echo "✅ Smoke tests done. Files in allure-results: $(ls allure-results/ | wc -l)"
+
+      - name: Run all tests
+        run: |
           MARKS="${{ github.event.inputs.test_marks }}"
           PARALLEL="${{ github.event.inputs.parallelism || '2' }}"
 
           if [ -n "$MARKS" ]; then
-            echo "🏷️  Running tests with marks: $MARKS"
             python3 -m pytest tests/ -m "$MARKS" \
               -n "$PARALLEL" \
               --alluredir=allure-results \
-              --tb=short \
-              -v \
-              || true
+              --tb=short -v || true
           else
-            echo "🧪 Running all tests"
             python3 -m pytest tests/ \
+              --ignore=tests/test_smoke.py \
               -n "$PARALLEL" \
               --alluredir=allure-results \
-              --tb=short \
-              -v \
-              || true
+              --tb=short -v || true
           fi
-          
-          echo "✅ Test run completed"
-          # Гарантируем что директория существует для artifact upload
-          mkdir -p allure-results
-
-      - name: List allure-results
-        if: always()
-        run: |
-          echo "📂 Contents of allure-results:"
-          ls -la allure-results/ 2>/dev/null | head -20 || echo "⚠️  allure-results directory is empty or doesn't exist"
-          echo ""
-          echo "📂 Full directory structure:"
-          find . -name "allure-results" -type d 2>/dev/null
+          echo "✅ All tests done. Total files: $(ls allure-results/ | wc -l)"
 
       - name: Upload Allure results
         uses: actions/upload-artifact@v4
@@ -212,6 +199,7 @@ jobs:
           name: allure-results
           path: ${{ env.WORKING_DIR }}/allure-results/
           retention-days: 30
+          if-no-files-found: warn
 
   # ─────────────────────────────────────────────────────────────
   # JOB 3: Publish Allure Report to GitHub Pages

@@ -160,14 +160,22 @@ jobs:
           EOF
 
       - name: Create allure-results directory
-        run: mkdir -p allure-results
+        run: |
+          pwd
+          mkdir -p allure-results
+          echo "📁 Created allure-results in: $(pwd)/allure-results"
 
       - name: Run tests
         run: |
+          echo "📂 Current working directory: $(pwd)"
+          echo "📂 Directory structure:"
+          ls -la .
+          
           MARKS="${{ github.event.inputs.test_marks }}"
           PARALLEL="${{ github.event.inputs.parallelism || '2' }}"
 
           if [ -n "$MARKS" ]; then
+            echo "🏷️  Running tests with marks: $MARKS"
             python3 -m pytest tests/ -m "$MARKS" \
               -n "$PARALLEL" \
               --alluredir=allure-results \
@@ -175,6 +183,7 @@ jobs:
               -v \
               || true
           else
+            echo "🧪 Running all tests"
             python3 -m pytest tests/ \
               -n "$PARALLEL" \
               --alluredir=allure-results \
@@ -183,12 +192,18 @@ jobs:
               || true
           fi
           
+          echo "✅ Test run completed"
           # Гарантируем что директория существует для artifact upload
           mkdir -p allure-results
 
       - name: List allure-results
         if: always()
-        run: ls -la allure-results/ || echo "allure-results directory is empty"
+        run: |
+          echo "📂 Contents of allure-results:"
+          ls -la allure-results/ 2>/dev/null | head -20 || echo "⚠️  allure-results directory is empty or doesn't exist"
+          echo ""
+          echo "📂 Full directory structure:"
+          find . -name "allure-results" -type d 2>/dev/null
 
       - name: Upload Allure results
         uses: actions/upload-artifact@v4

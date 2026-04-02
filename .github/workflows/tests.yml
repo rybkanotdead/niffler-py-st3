@@ -139,9 +139,11 @@ jobs:
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install pytest selene selenium python-dotenv faker pytest-xdist \
+          pip install pytest selenium python-dotenv faker pytest-xdist \
                       requests pydantic urllib3 psycopg2-binary sqlalchemy sqlmodel \
                       allure-pytest grpcio grpcio-tools protobuf zeep kafka-python
+          # Install specific version of selene compatible with Selenium 4.x
+          pip install 'selene>=2.0.0'
 
       - name: Generate gRPC stubs
         run: |
@@ -178,24 +180,51 @@ jobs:
           echo ""
           echo "Total test files: $(find tests -name "test_*.py" -type f | wc -l)"
 
+      - name: Verify critical imports
+        run: |
+          echo "🔍 Verifying critical imports..."
+          python3 -c "import pytest; print(f'pytest: {pytest.__version__}')"
+          python3 -c "import allure; print(f'allure: {allure.__version__}')"
+          python3 -c "from selene import browser; print('selene: OK')" || echo "⚠️ selene import failed (expected in CI)"
+          python3 -c "from config import get_config; print('config: OK')" || echo "⚠️ config import failed"
+          python3 -c "from helpers.db_client import DBClient; print('DBClient: OK')" || echo "⚠️ DBClient import failed"
+          echo ""
+          echo "Attempting to import conftest..."
+          python3 -c "import sys; sys.path.insert(0, '.'); import conftest; print('conftest: OK')" || echo "⚠️ conftest import might have issues"
+
       - name: Run all tests excluding smoke tests
         run: |
           echo "🧪 Running tests..."
           echo "Current directory: $(pwd)"
+          echo ""
+          echo "Python version:"
+          python3 --version
+          echo ""
+          echo "Pytest version:"
+          python3 -m pytest --version
+          echo ""
+          echo "Available test files:"
+          ls -la tests/test_*.py
           echo ""
           
           echo "Running all tests (excluding smoke tests)..."
           python3 -m pytest tests/ --ignore=tests/test_smoke.py \
             --alluredir=allure-results \
             -v \
-            --tb=short 2>&1 | tee pytest-output.log || true
+            --tb=short -s 2>&1 | tee pytest-output.log
           
+          TEST_EXIT_CODE=$?
+          echo ""
+          echo "Test execution exit code: $TEST_EXIT_CODE"
+          echo ""
+          echo "Pytest output log:"
+          cat pytest-output.log | tail -100
           echo ""
           echo "Checking results..."
           if [ -d "allure-results" ]; then
             COUNT=$(find allure-results -type f -name "*.json" 2>/dev/null | wc -l)
             echo "✅ Created $COUNT JSON files in allure-results"
-            ls -lah allure-results/ | head -20
+            ls -lah allure-results/ | head -30
           else
             echo "❌ allure-results directory not found"
           fi

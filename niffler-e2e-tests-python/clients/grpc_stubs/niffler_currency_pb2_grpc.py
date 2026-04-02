@@ -5,9 +5,12 @@ import warnings
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 try:
-    from clients.grpc_stubs import niffler_currency_pb2 as niffler__currency__pb2
+    from . import niffler_currency_pb2 as niffler__currency__pb2
 except ImportError:
-    import niffler_currency_pb2 as niffler__currency__pb2  # type: ignore
+    try:
+        from clients.grpc_stubs import niffler_currency_pb2 as niffler__currency__pb2
+    except ImportError:
+        import niffler_currency_pb2 as niffler__currency__pb2  # type: ignore
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__

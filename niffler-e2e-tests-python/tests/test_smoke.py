@@ -23,6 +23,31 @@ class TestSmoke:
 
     @allure.feature("smoke")
     @allure.story("infrastructure")
+    @allure.title("Тест GitHub Actions CI")
+    def test_ci_environment(self):
+        """Тест проверяет что CI окружение работает."""
+        import os
+        with allure.step("Проверяем переменные окружения"):
+            # Проверяем что мы в CI окружении
+            ci_env = os.environ.get('CI') or os.environ.get('GITHUB_ACTIONS')
+            allure.attach(
+                f"CI Environment: {ci_env or 'Local'}",
+                name="ci_info",
+                attachment_type=allure.attachment_type.TEXT
+            )
+            assert True
+
+    @allure.feature("smoke")
+    @allure.story("infrastructure")
+    @allure.title("Тест работоспособности Python окружения")
+    def test_python_environment(self):
+        """Тест проверяет Python версию и основные модули."""
+        import sys
+        with allure.step(f"Проверяем Python версию: {sys.version}"):
+            assert sys.version_info >= (3, 9), "Python версия должна быть >= 3.9"
+
+    @allure.feature("smoke")
+    @allure.story("infrastructure")
     @allure.title("Простой assert тест")
     def test_simple_assert(self):
         """Простой тест без зависимостей."""

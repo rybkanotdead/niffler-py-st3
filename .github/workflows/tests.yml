@@ -134,7 +134,7 @@ jobs:
           pip install --upgrade pip
           pip install pytest selene selenium python-dotenv faker pytest-xdist \
                       requests pydantic urllib3 psycopg2-binary sqlalchemy sqlmodel \
-                      allure-pytest grpcio grpcio-tools protobuf zeep kafka-python
+                      allure-pytest "grpcio>=1.80.0" "grpcio-tools>=1.80.0" protobuf zeep kafka-python
 
       - name: Generate gRPC stubs
         run: |

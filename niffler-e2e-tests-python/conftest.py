@@ -19,9 +19,31 @@ from faker import Faker
 
 from config import get_config
 from clients.api import CategoryApiClient, SpendApiClient
-from clients.grpc_client import CurrencyGrpcClient
-from clients.soap_client import UserdataSoapClient
-from clients.kafka_client import KafkaClient
+
+try:
+    from clients.grpc_client import CurrencyGrpcClient
+    _grpc_available = True
+except Exception as e:
+    print(f"⚠️  gRPC client import failed: {e}")
+    CurrencyGrpcClient = None
+    _grpc_available = False
+
+try:
+    from clients.soap_client import UserdataSoapClient
+    _soap_available = True
+except Exception as e:
+    print(f"⚠️  SOAP client import failed: {e}")
+    UserdataSoapClient = None
+    _soap_available = False
+
+try:
+    from clients.kafka_client import KafkaClient
+    _kafka_available = True
+except Exception as e:
+    print(f"⚠️  Kafka client import failed: {e}")
+    KafkaClient = None
+    _kafka_available = False
+
 from helpers.db_client import DBClient
 from pages.auth_reg_page import AuthRegistrationPage
 from pages.profile_page import ProfilePage

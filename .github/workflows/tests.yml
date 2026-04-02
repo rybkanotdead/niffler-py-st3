@@ -180,45 +180,61 @@ jobs:
 
       - name: 🚀 Run ALL tests with Allure reporting
         run: |
-          echo "🧪 Running all 60+ tests..."
+          echo "🧪 Running all 72 tests..."
+          cd niffler-e2e-tests-python
+          
+          # First, list all tests that will be collected
+          echo "Tests to be collected:"
+          python3 -m pytest tests/ --collect-only -q 2>&1 | tail -20
+          
+          echo ""
+          echo "Running tests with Allure..."
           python3 -m pytest tests/ \
             --alluredir=allure-results \
             -v \
             --tb=short \
-            --co -q | head -70
+            -p no:warnings 2>&1 | tee test-output.log
+            
           echo ""
-          echo "Executing tests..."
-          python3 -m pytest tests/ \
-            --alluredir=allure-results \
-            -v \
-            --tb=line 2>&1 | tail -100
-          echo "✅ Test run completed"
+          echo "Test run completed. Checking results..."
+          ls -lah allure-results/ | head -20
+          echo "Total JSON files: $(find allure-results -type f -name '*.json' | wc -l)"
 
       - name: 📊 Check Allure Results
         run: |
+          cd niffler-e2e-tests-python
           echo "Checking allure-results directory:"
           echo "Current working directory: $(pwd)"
           echo ""
-          echo "niffler-e2e-tests-python/allure-results contents:"
-          ls -lah niffler-e2e-tests-python/allure-results/ 2>/dev/null | head -20 || echo "Directory not found"
+          echo "allure-results contents:"
+          ls -lah allure-results/ 2>/dev/null | head -30 || echo "Directory not found"
           echo ""
-          echo "Total JSON files in niffler-e2e-tests-python/allure-results:"
-          find niffler-e2e-tests-python/allure-results -type f -name "*.json" 2>/dev/null | wc -l || echo "0 JSON files"
+          echo "Total JSON files:"
+          find allure-results -type f -name "*.json" 2>/dev/null | wc -l || echo "0"
+          echo ""
+          echo "First 5 JSON files:"
+          find allure-results -type f -name "*.json" 2>/dev/null | head -5
 
       - name: Copy allure-results for upload
         run: |
+          cd niffler-e2e-tests-python
           echo "Preparing artifacts for upload..."
+          echo "Current directory: $(pwd)"
+          
           if [ -d "allure-results" ] && [ -n "$(ls -A allure-results)" ]; then
-            echo "✅ allure-results has $(find allure-results -type f -name '*.json' | wc -l) JSON files"
+            COUNT=$(find allure-results -type f -name '*.json' | wc -l)
+            echo "✅ allure-results has $COUNT JSON files"
           else
-            echo "⚠️ allure-results is empty, creating placeholder"
+            echo "⚠️ allure-results is empty or missing"
             mkdir -p allure-results
             echo '{"name":"Placeholder","status":"passed"}' > allure-results/placeholder.json
+            echo "Created placeholder"
           fi
           
-          # Create tar for debugging
-          tar -czf allure-results.tar.gz allure-results/ || true
-          ls -lh allure-results.tar.gz || true
+          # Show what will be uploaded
+          echo ""
+          echo "Files to be uploaded:"
+          ls -lah allure-results/ | head -10
 
       - name: List allure results
         run: |

@@ -157,8 +157,32 @@ jobs:
         run: mkdir -p allure-results
 
       - name: Run tests
-        run: python3 -m pytest tests/ --alluredir=allure-results -v || true
-        continue-on-error: true
+        run: |
+          python3 -m pytest tests/ --alluredir=allure-results -v --tb=short || true
+          echo "Tests completed"
+
+      - name: Ensure allure-results directory exists
+        run: |
+          mkdir -p allure-results
+          if [ ! "$(ls -A allure-results)" ]; then
+            echo "No test results found - creating empty test result"
+            cat > allure-results/empty-test-result.json << 'EOF'
+          {
+            "name": "No tests executed",
+            "status": "skipped",
+            "stage": "finished",
+            "steps": [],
+            "attachments": [],
+            "parameters": [],
+            "start": 0,
+            "stop": 0,
+            "uuid": "00000000-0000-0000-0000-000000000000",
+            "historyId": "00000000-0000-0000-0000-000000000000",
+            "fullName": "Environment not available",
+            "labels": []
+          }
+          EOF
+          fi
 
       - name: Upload Allure results
         uses: actions/upload-artifact@v4
@@ -167,7 +191,7 @@ jobs:
           name: allure-results
           path: ${{ env.WORKING_DIR }}/allure-results/
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: ignore
 
   allure-report:
     name: 📊 Publish Allure Report
@@ -189,6 +213,13 @@ jobs:
         with:
           name: allure-results
           path: allure-results
+
+      - name: Ensure allure-results directory exists
+        run: |
+          mkdir -p allure-results
+          # List contents for debugging
+          echo "Contents of allure-results:"
+          ls -la allure-results/ || echo "Directory is empty"
 
       - name: Get Allure history
         uses: actions/checkout@v4

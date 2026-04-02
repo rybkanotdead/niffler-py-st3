@@ -173,11 +173,10 @@ jobs:
             --tb=short -v || true
           echo "✅ Smoke done. Files: $(ls allure-results/ 2>/dev/null | wc -l)"
 
-      - name: Run all tests
-        run: |
-          cd niffler-e2e-tests-python
-          python3 -m pytest tests/ --alluredir=allure-results -v || true
-          echo "Done. Allure files: $(ls allure-results 2>/dev/null | wc -l)"
+       - name: Run all tests
+         run: |
+           python3 -m pytest tests/ --alluredir=allure-results -v || true
+           echo "Done. Allure files: $(ls allure-results 2>/dev/null | wc -l)"
 
       - name: Upload Allure results
         uses: actions/upload-artifact@v4
@@ -230,11 +229,12 @@ jobs:
           ref: gh-pages
           path: gh-pages
 
-      - name: Prepare allure-history directory
-        if: always()
-        run: |
-          mkdir -p allure-history
-          touch allure-history/.nojekyll
+       - name: Prepare allure-history directory
+         if: always()
+         run: |
+           mkdir -p allure-history
+           chmod 755 allure-history 2>/dev/null || true
+           echo "" > allure-history/.nojekyll
 
       - name: Generate Allure Report
         uses: simple-elf/allure-report-action@master
@@ -245,12 +245,12 @@ jobs:
           allure_history: allure-history
           keep_reports: 30
 
-      - name: Fix permissions and ensure .nojekyll exists
-        if: always()
-        run: |
-          sudo chmod -R 777 allure-history || true
-          touch allure-history/.nojekyll
-          echo "Files in allure-history: $(ls allure-history/ | wc -l)"
+       - name: Fix permissions and ensure .nojekyll exists
+         if: always()
+         run: |
+           chmod -R 755 allure-history 2>/dev/null || true
+           echo "" > allure-history/.nojekyll 2>/dev/null || true
+           echo "Files in allure-history: $(ls -1 allure-history 2>/dev/null | wc -l)"
 
       - name: Deploy Allure Report to GitHub Pages
         if: always()

@@ -142,8 +142,8 @@ jobs:
           pip install pytest selenium python-dotenv faker pytest-xdist \
                       requests pydantic urllib3 psycopg2-binary sqlalchemy sqlmodel \
                       allure-pytest grpcio grpcio-tools protobuf zeep kafka-python
-          # Install specific version of selene compatible with Selenium 4.x
-          pip install 'selene>=2.0.0'
+          # Install latest available version of selene (2.0.0rc9 is compatible with Selenium 4.x)
+          pip install 'selene==2.0.0rc9' || pip install selene
 
       - name: Generate gRPC stubs
         run: |

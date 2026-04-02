@@ -1,0 +1,9 @@
+{
+  "event_type": "user.registered",
+  "username": "newuser",
+  "email": "newuser@example.com",
+  "timestamp": "2026-04-02T16:59:39.829220",
+  "version": "1.0",
+  "partition": 0,
+  "offset": 12345
+}

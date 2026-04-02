@@ -178,27 +178,27 @@ jobs:
           echo ""
           echo "Total test files: $(find tests -name "test_*.py" -type f | wc -l)"
 
-      - name: 🚀 Run tests with Allure reporting
-        run: |
-          echo "🧪 Running tests..."
-          echo "Current directory: $(pwd)"
-          echo ""
-          
-          echo "Running integration and smoke tests (UI tests require full environment)..."
-          python3 -m pytest tests/test_integration.py tests/test_smoke.py \
-            --alluredir=allure-results \
-            -v \
-            --tb=short 2>&1 | tee pytest-output.log || true
-          
-          echo ""
-          echo "Checking results..."
-          if [ -d "allure-results" ]; then
-            COUNT=$(find allure-results -type f -name "*.json" 2>/dev/null | wc -l)
-            echo "✅ Created $COUNT JSON files in allure-results"
-            ls -lah allure-results/ | head -10
-          else
-            echo "❌ allure-results directory not found"
-          fi
+       - name: 🚀 Run tests with Allure reporting
+         run: |
+           echo "🧪 Running tests..."
+           echo "Current directory: $(pwd)"
+           echo ""
+           
+           echo "Running all tests (excluding smoke tests)..."
+           python3 -m pytest tests/ --ignore=tests/test_smoke.py \
+             --alluredir=allure-results \
+             -v \
+             --tb=short 2>&1 | tee pytest-output.log || true
+           
+           echo ""
+           echo "Checking results..."
+           if [ -d "allure-results" ]; then
+             COUNT=$(find allure-results -type f -name "*.json" 2>/dev/null | wc -l)
+             echo "✅ Created $COUNT JSON files in allure-results"
+             ls -lah allure-results/ | head -20
+           else
+             echo "❌ allure-results directory not found"
+           fi
 
       - name: 📊 Check Allure Results
         run: |
@@ -336,22 +336,35 @@ jobs:
           mkdir -p allure-history
           echo "" > allure-history/.nojekyll 2>/dev/null || true
 
-      - name: Generate Allure Report
-        uses: simple-elf/allure-report-action@master
-        if: always()
-        continue-on-error: true
-        with:
-          allure_results: allure-results
-          allure_history: allure-history
-          keep_reports: 30
+       - name: Copy allure-results to root directory
+         if: always()
+         run: |
+           echo "📋 Copying allure-results from niffler-e2e-tests-python to root..."
+           mkdir -p ../allure-results
+           if [ -d "allure-results" ] && [ -n "$(ls -A allure-results)" ]; then
+             cp -r allure-results/* ../allure-results/
+             echo "✅ Copied $(find ../allure-results -type f | wc -l) files"
+           else
+             echo "⚠️ No allure-results to copy"
+           fi
+           ls -lah ../allure-results/ 2>/dev/null | head -10
 
-      - name: Deploy Allure Report to GitHub Pages
-        if: always()
-        uses: peaceiris/actions-gh-pages@v4
-        continue-on-error: true
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: allure-history
-          force_orphan: false
+       - name: Generate Allure Report
+         uses: simple-elf/allure-report-action@master
+         if: always()
+         continue-on-error: true
+         with:
+           allure_results: allure-results
+           allure_history: allure-history
+           keep_reports: 30
+
+       - name: Deploy Allure Report to GitHub Pages
+         if: always()
+         uses: peaceiris/actions-gh-pages@v4
+         continue-on-error: true
+         with:
+           github_token: ${{ secrets.GITHUB_TOKEN }}
+           publish_branch: gh-pages
+           publish_dir: allure-history
+           force_orphan: false
 

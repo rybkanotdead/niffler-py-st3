@@ -171,62 +171,39 @@ jobs:
       - name: Create allure-results directory
         run: mkdir -p allure-results
 
-      - name: Verify test files exist
+      - name: 🔍 List all test files
         run: |
-          echo "🔍 Checking test files:"
-          find tests -name "test_*.py" -type f
+          echo "📋 Test files found:"
+          find tests -name "test_*.py" -type f | sort
           echo ""
-          echo "pytest version:"
-          python3 -m pytest --version
+          echo "Total test files: $(find tests -name "test_*.py" -type f | wc -l)"
 
-      - name: 📊 Test Coverage Information
+      - name: 🚀 Run ALL tests with Allure reporting
         run: |
-          echo "📋 Tests to be executed:"
-          echo ""
-          echo "✅ Integration Tests (API, DB, gRPC, SOAP, Kafka)"
-          echo "   - No external dependencies (uses mock/unit testing)"
-          echo "   - Always runs in CI"
-          echo ""
-          echo "✅ Smoke Tests"
-          echo "   - Simple assertions"
-          echo ""
-          echo "🟢 Additional Tests (if Docker services available)"
-          echo "   - UI tests (Selenium/Selene)"
-          echo "   - API tests (requests)"
-          echo "   - Database tests (SQLAlchemy)"
-          echo "   - May be skipped if services unavailable"
-
-      - name: Run integration tests
-        run: |
-          echo "🚀 Running integration tests..."
-          if [ -f tests/test_integration.py ]; then
-            python3 -m pytest tests/test_integration.py \
-              --alluredir=allure-results \
-              -v --tb=short 2>&1 | tee integration-tests.log
-            echo "✅ Integration tests completed"
-          else
-            echo "⚠️ test_integration.py not found"
-          fi
-
-      - name: Run smoke tests
-        run: |
-          echo "🚀 Running smoke tests..."
-          if [ -f tests/test_smoke.py ]; then
-            python3 -m pytest tests/test_smoke.py \
-              --alluredir=allure-results \
-              -v --tb=short 2>&1 | tee smoke-tests.log
-            echo "✅ Smoke tests completed"
-          else
-            echo "⚠️ test_smoke.py not found"
-          fi
-
-      - name: Run all other tests
-        run: |
-          echo "🧪 Running all tests..."
+          echo "🧪 Running all 60+ tests..."
           python3 -m pytest tests/ \
             --alluredir=allure-results \
-            -v --tb=short 2>&1 | tee all-tests.log || true
-          echo "✅ All tests completed"
+            -v \
+            --tb=short \
+            --co -q | head -70
+          echo ""
+          echo "Executing tests..."
+          python3 -m pytest tests/ \
+            --alluredir=allure-results \
+            -v \
+            --tb=line 2>&1 | tail -100
+          echo "✅ Test run completed"
+
+      - name: 📊 Check Allure Results
+        run: |
+          echo "Checking allure-results directory:"
+          ls -lah allure-results/ 2>/dev/null | head -20 || echo "Directory not found"
+          echo ""
+          echo "JSON files in allure-results:"
+          find allure-results -type f -name "*.json" 2>/dev/null | wc -l
+          echo ""
+          echo "First few files:"
+          find allure-results -type f -name "*.json" 2>/dev/null | head -5
 
       - name: List allure results
         run: |

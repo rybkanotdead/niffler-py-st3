@@ -9,7 +9,16 @@ from urllib.parse import urlparse
 
 import pytest
 import allure
-from selene import browser
+
+# Try to import Selene - it may fail in CI due to version incompatibilities
+try:
+    from selene import browser
+    _selene_available = True
+except (ImportError, ModuleNotFoundError) as e:
+    print(f"⚠️  Selene import failed: {e}")
+    browser = None
+    _selene_available = False
+
 from selenium import webdriver
 from selenium.webdriver import ChromeOptions
 from selenium.webdriver.common.by import By

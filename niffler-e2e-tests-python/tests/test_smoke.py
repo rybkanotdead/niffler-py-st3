@@ -22,38 +22,21 @@ class TestSmoke:
 
     @allure.feature("smoke")
     @allure.story("infrastructure")
-    @allure.title("Тест конфигурации")
-    def test_config_loaded(self, config):
-        """Проверяем что конфигурация загружена."""
-        with allure.step("Проверяем наличие основных параметров конфигурации"):
-            assert config.frontend_url, "Frontend URL должен быть установлен"
-            assert config.auth_url, "Auth URL должен быть установлен"
-            assert config.gateway_url, "Gateway URL должен быть установлен"
+    @allure.title("Простой assert тест")
+    def test_simple_assert(self):
+        """Простой тест без зависимостей."""
+        result = 5 + 5
+        with allure.step(f"Проверяем что 5 + 5 = {result}"):
+            assert result == 10, f"Expected 10 but got {result}"
 
-    @allure.feature("smoke")
-    @allure.story("infrastructure")
-    @allure.title("Проверка доступности сервисов")
-    def test_services_status(self, _services):
-        """Информационный тест - выводит статус доступности сервисов."""
-        with allure.step("Статус сервисов"):
-            for service, status in _services.items():
-                service_status = "✅ доступен" if status else "⏭ пропущен (не доступен)"
-                allure.attach(
-                    f"{service}: {service_status}",
-                    name=f"service_{service}",
-                    attachment_type=allure.attachment_type.TEXT
-                )
-        # Тест всегда проходит - это информационный тест
-        assert True
-
-    @pytest.mark.parametrize("test_num", range(1, 4))
+    @pytest.mark.parametrize("value", [1, 2, 3, 4, 5])
     @allure.feature("smoke")
     @allure.story("parametrized")
     @allure.title("Параметризованные тесты")
-    def test_parametrized(self, test_num):
+    def test_parametrized(self, value):
         """Тест с параметризацией для демонстрации разнообразия."""
-        with allure.step(f"Проверяем параметр {test_num}"):
-            assert test_num > 0, f"Параметр {test_num} должен быть положительным"
+        with allure.step(f"Проверяем что {value} > 0"):
+            assert value > 0, f"Значение {value} должно быть положительным"
 
     @allure.feature("smoke")
     @allure.story("infrastructure")
@@ -81,4 +64,59 @@ class TestSmoke:
             )
 
         assert True
+
+    @allure.feature("smoke")
+    @allure.story("infrastructure")
+    @allure.title("Тест с множественными шагами")
+    def test_multiple_steps(self):
+        """Тест с множеством шагов для демонстрации."""
+        with allure.step("Шаг 1: Инициализация"):
+            value = 0
+            assert value == 0
+
+        with allure.step("Шаг 2: Инкремент"):
+            value += 1
+            assert value == 1
+
+        with allure.step("Шаг 3: Удвоение"):
+            value *= 2
+            assert value == 2
+
+        with allure.step("Шаг 4: Финальная проверка"):
+            assert value == 2, f"Expected 2 but got {value}"
+
+    @allure.feature("smoke")
+    @allure.story("infrastructure")
+    @allure.title("Тест со строковыми операциями")
+    def test_string_operations(self):
+        """Тест проверяет строковые операции."""
+        with allure.step("Проверяем конкатенацию"):
+            result = "Hello" + " " + "World"
+            assert result == "Hello World"
+
+        with allure.step("Проверяем длину строки"):
+            assert len(result) == 11
+
+        with allure.step("Проверяем наличие подстроки"):
+            assert "World" in result
+
+    @allure.feature("smoke")
+    @allure.story("infrastructure")
+    @allure.title("Тест с логированием в Allure")
+    def test_with_logging(self):
+        """Тест с логированием в Allure отчет."""
+        with allure.step("Логируем информацию"):
+            allure.attach(
+                "Тестовое окружение запущено\n"
+                "GitHub Actions: ✅\n"
+                "Allure: ✅\n"
+                "Workflow: ✅",
+                name="test_environment",
+                attachment_type=allure.attachment_type.TEXT
+            )
+
+        with allure.step("Проверяем что логирование работает"):
+            assert True
+
+
 

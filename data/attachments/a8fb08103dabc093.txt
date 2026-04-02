@@ -1,2 +1,0 @@
-Query: INSERT INTO category (id, name, username, archived) VALUES (%s, %s, %s, %s)
-Params: ('40df8c50-ef0d-412c-a500-127a49c6872a', 'Arch_Test_0196', 'rybkanotdead', False)

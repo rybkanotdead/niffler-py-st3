@@ -184,8 +184,8 @@ jobs:
           echo "Current directory: $(pwd)"
           echo ""
           
-          echo "Running all tests..."
-          python3 -m pytest tests/ \
+          echo "Running integration and smoke tests (UI tests require full environment)..."
+          python3 -m pytest tests/test_integration.py tests/test_smoke.py \
             --alluredir=allure-results \
             -v \
             --tb=short 2>&1 | tee pytest-output.log || true

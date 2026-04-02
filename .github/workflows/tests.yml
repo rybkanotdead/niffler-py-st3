@@ -166,33 +166,24 @@ jobs:
 
       - name: Run smoke tests (always runs, no conftest dependencies)
         run: |
-          echo "🚀 Running smoke tests with --noconftest..."
+          echo "🚀 Running smoke tests..."
           python3 -m pytest tests/test_smoke.py \
             --noconftest \
             --alluredir=allure-results \
-            --tb=short \
-            -v \
-            || true
-          echo "✅ Smoke tests done. Files in allure-results: $(ls allure-results/ | wc -l)"
+            --tb=short -v || true
+          echo "✅ Smoke done. Files: $(ls allure-results/ 2>/dev/null | wc -l)"
 
       - name: Run all tests
         run: |
-          MARKS="${{ github.event.inputs.test_marks }}"
-          PARALLEL="${{ github.event.inputs.parallelism || '2' }}"
-
-          if [ -n "$MARKS" ]; then
-            python3 -m pytest tests/ -m "$MARKS" \
-              -n "$PARALLEL" \
-              --alluredir=allure-results \
-              --tb=short -v || true
-          else
-            python3 -m pytest tests/ \
-              --ignore=tests/test_smoke.py \
-              -n "$PARALLEL" \
-              --alluredir=allure-results \
-              --tb=short -v || true
-          fi
-          echo "✅ All tests done. Total files: $(ls allure-results/ | wc -l)"
+          echo "🔍 Pytest rootdir info:"
+          python3 -m pytest --co -q tests/ --ignore=tests/test_smoke.py 2>&1 | head -10 || true
+          echo ""
+          echo "🧪 Running all tests..."
+          python3 -m pytest tests/ \
+            --ignore=tests/test_smoke.py \
+            --alluredir=allure-results \
+            --tb=short -v || true
+          echo "✅ All done. Files: $(ls allure-results/ 2>/dev/null | wc -l)"
 
       - name: Upload Allure results
         uses: actions/upload-artifact@v4

@@ -197,14 +197,13 @@ jobs:
       - name: 📊 Check Allure Results
         run: |
           echo "Checking allure-results directory:"
-          pwd
-          ls -lah | grep allure || echo "No allure in current dir"
+          echo "Current working directory: $(pwd)"
           echo ""
-          echo "allure-results contents:"
-          ls -lah allure-results/ 2>/dev/null | head -20 || echo "allure-results not found"
+          echo "niffler-e2e-tests-python/allure-results contents:"
+          ls -lah niffler-e2e-tests-python/allure-results/ 2>/dev/null | head -20 || echo "Directory not found"
           echo ""
-          echo "Total JSON files in allure-results:"
-          find allure-results -type f -name "*.json" 2>/dev/null | wc -l || echo "No JSON files"
+          echo "Total JSON files in niffler-e2e-tests-python/allure-results:"
+          find niffler-e2e-tests-python/allure-results -type f -name "*.json" 2>/dev/null | wc -l || echo "0 JSON files"
 
       - name: Copy allure-results for upload
         run: |
@@ -258,7 +257,7 @@ jobs:
         if: always()
         with:
           name: allure-results
-          path: allure-results/
+          path: niffler-e2e-tests-python/allure-results/
           retention-days: 30
           if-no-files-found: ignore
 

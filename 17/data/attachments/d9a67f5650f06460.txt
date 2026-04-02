@@ -1,0 +1,4 @@
+Тестовое окружение запущено
+GitHub Actions: ✅
+Allure: ✅
+Workflow: ✅

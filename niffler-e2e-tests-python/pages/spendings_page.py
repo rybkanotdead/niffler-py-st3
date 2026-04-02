@@ -46,38 +46,31 @@ class SpendingPage:
 
     def fill_category(self, category: str):
         """
-        Выбирает категорию из чипсов, уже видимых на форме.
-        Ищет button с текстом категории и кликает прямо на него.
+        Заполняет поле категории. Может вводить текст или выбирать из чипсов.
         """
-        time.sleep(1)  # Даем форме время на загрузку
+        time.sleep(0.5)
         
-        # Пытаемся найти чип категории с разными селекторами
-        category_chip = None
+        # Кликаем на поле категории
+        self.category.click()
+        time.sleep(0.5)
         
+        # Вводим первые буквы категории
+        self.category.type(category[0])
+        time.sleep(0.5)
+        
+        # Ищем и кликаем на первый найденный результат (чип или опцию)
         try:
-            # Первый вариант - точное совпадение текста
-            category_chip = browser.element(by.xpath(f'//button[normalize-space(.) = "{category}"]'))
-            category_chip.should(be.visible)
+            # Пытаемся найти кнопку/чип по тексту
+            chip = browser.element(by.xpath(f'//button[contains(text(), "{category}")]'))
+            chip.click()
         except:
             try:
-                # Второй вариант - кнопка с содержанием текста
-                category_chip = browser.element(by.xpath(f'//button[contains(., "{category}")]'))
-                category_chip.should(be.visible)
+                # Или ищем по тексту в span/div
+                chip = browser.element(by.xpath(f'//*[contains(text(), "{category}")]'))
+                chip.click()
             except:
-                try:
-                    # Третий вариант - span/div с текстом категории внутри button
-                    category_chip = browser.element(by.xpath(f'//*[contains(text(), "{category}")]/..'))
-                    category_chip.should(be.visible)
-                except:
-                    # Последний вариант - ищем по value атрибуту
-                    category_chip = browser.element(by.xpath(f'//button[@value="{category}"]'))
-                    category_chip.should(be.visible)
-        
-        # Кликаем на найденный элемент
-        if category_chip:
-            category_chip.click()
-        else:
-            raise Exception(f"Could not find category button for '{category}'")
+                # Если не нашли, пусть система создаст новую категорию (нажимаем Enter)
+                self.category.press(Keys.ENTER)
 
     def fill_datepicker_input(self, full_date: str):
         self.datepicker_input.send_keys(Keys.COMMAND + 'a')

@@ -6,11 +6,11 @@ from selene import have, be
 class TestSpending:
     description_1_row = 'test_1'
 
-    def test_add_spendings_datepicker_input(self, spending_page, login_user, cleanup_spendings, setup_test_categories):
+    def test_add_spendings_datepicker_input(self, spending_page, login_user, cleanup_spendings):
         spending_page.add_spending_btn.click()
         spending_page.fill_amount(amount=random.randint(1, 100))
         spending_page.choose_usd()
-        spending_page.fill_category(category='abc')
+        spending_page.fill_category(category='Test')
         spending_page.fill_datepicker_input(full_date='10/10/2024')
         spending_page.fill_description(description=self.description_1_row)
         spending_page.add_btn.click()
@@ -18,11 +18,11 @@ class TestSpending:
         # Форма должна закрыться после успешного добавления
         spending_page.add_spending_btn.should(be.visible)
 
-    def test_add_spendings_datepicker_btns(self, spending_page, login_user, cleanup_spendings, setup_test_categories):
+    def test_add_spendings_datepicker_btns(self, spending_page, login_user, cleanup_spendings):
         spending_page.add_spending_btn.click()
         spending_page.fill_amount(amount=random.randint(1, 100))
         spending_page.choose_usd()
-        spending_page.fill_category(category='abc')
+        spending_page.fill_category(category='Food')
         spending_page.fill_date_picker_btns()
         spending_page.fill_description(description=self.description_1_row)
         spending_page.add_btn.click()
@@ -30,11 +30,11 @@ class TestSpending:
         # Форма должна закрыться после успешного добавления
         spending_page.add_spending_btn.should(be.visible)
 
-    def test_delete_spending(self, spending_page, login_user, setup_test_categories):
+    def test_delete_spending(self, spending_page, login_user):
         spending_page.add_spending_btn.click()
         spending_page.fill_amount(100)
         spending_page.choose_usd()
-        spending_page.fill_category('delete_test')
+        spending_page.fill_category('Travel')
         spending_page.fill_description('to delete')
         spending_page.add_btn.click()
         time.sleep(1)
@@ -66,7 +66,7 @@ class TestSpending:
         spending_page.add_btn.should(be.visible)
         spending_page.click_on_cancel()
 
-    def test_add_spending_max_amount(self, spending_page, login_user, cleanup_spendings, setup_test_categories):
+    def test_add_spending_max_amount(self, spending_page, login_user, cleanup_spendings):
         """Граничные значения: большая сумма"""
         spending_page.add_spending_btn.click()
         spending_page.fill_amount(999999)

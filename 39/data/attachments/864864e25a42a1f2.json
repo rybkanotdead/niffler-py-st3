@@ -1,0 +1,9 @@
+{
+  "user": {
+    "id": "user-123",
+    "username": "testuser",
+    "first_name": "Test",
+    "last_name": "User",
+    "email": "test@example.com"
+  }
+}

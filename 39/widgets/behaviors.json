@@ -1,0 +1,1 @@
+{"total":2,"items":[{"uid":"184fd35372112f7fc8cdf42bf6b7c765","name":"integration","statistic":{"failed":0,"broken":0,"skipped":0,"passed":6,"unknown":0,"total":6}},{"uid":"2a3cdd9ab3fa4918c832cb313a519d7a","name":"smoke","statistic":{"failed":0,"broken":0,"skipped":0,"passed":2,"unknown":0,"total":2}}]}

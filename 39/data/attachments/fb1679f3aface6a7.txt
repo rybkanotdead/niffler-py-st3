@@ -1,0 +1,4 @@
+✅ Create
+✅ Read
+✅ Update
+✅ Delete

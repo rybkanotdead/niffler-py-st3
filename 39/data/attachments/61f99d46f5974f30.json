@@ -1,0 +1,11 @@
+{
+  "event_type": "spend.created",
+  "spend_id": "spend-123",
+  "username": "testuser",
+  "amount": 150.0,
+  "currency": "RUB",
+  "category": "Food",
+  "timestamp": "2026-04-02T17:15:49.824719",
+  "topic": "users",
+  "published": true
+}
